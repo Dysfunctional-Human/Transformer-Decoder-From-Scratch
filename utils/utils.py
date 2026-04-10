@@ -7,10 +7,10 @@ def get_batch(
     context_window_len: int, 
     batch_size: int
     ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Returns x and y tensors from training/validation tensors. Both x and y are of shape (batch_size, context_window_len)
+    """Returns x and y tensors from train/val tensors. Both x and y are of shape (batch_size, context_window_len)
 
     Args:
-        split (str): The split to get data from (training or validation)
+        split (str): The split to get data from (train or val)
         train_data (torch.Tensor): Training data tensor
         val_data (torch.Tensor): Validation data tensor
         context_window_len (int): Length of model's context window
@@ -40,9 +40,9 @@ def get_batch(
         )
     
     # List of indices of data to select model input and output
-    ix = torch.randint(low=0, high=len(data)-context_window_len, size=(batch_size,))    # ix -> [batch_size]
+    ix = torch.randint(low=0, high=len(data)-context_window_len, size=(batch_size,), device=data.device)    # ix -> [batch_size]
     # token numbers according to stoi that are given as input to the model
-    x = torch.stack([data[i:i + context_window_len] for i in ix])   # x -> [batch_size, context_window_len]
+    x = torch.stack([data[i:i + context_window_len] for i in ix]).to(device=data.device)   # x -> [batch_size, context_window_len]
     # same as x but everything shifted to the right by one (target is predicting the next token)
-    y = torch.stack([data[i + 1: i + context_window_len + 1] for i in ix])  # y -> [batch_size, context_window_len]
+    y = torch.stack([data[i + 1: i + context_window_len + 1] for i in ix]).to(device=data.device)  # y -> [batch_size, context_window_len]
     return (x, y)

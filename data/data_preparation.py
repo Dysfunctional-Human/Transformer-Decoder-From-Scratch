@@ -8,7 +8,7 @@ from utils.utils import get_batch
 class Dataset():
     """Dataset class for the Decoder model
     """
-    def __init__(self, data_path: str):
+    def __init__(self, data_path: str, device = "cuda"):
         """Initializes the dataset class
 
         Args:
@@ -22,9 +22,12 @@ class Dataset():
         try:
             with open(data_path, "r", encoding='utf-8') as f:
                 self.raw_text = f.read().lower()
+                print("Data loaded")
         except Exception as e:
             print(f"Error loading data: {e}")
             raise ValueError(f"Error loading data from the given file: {self.data_path}. Ensure the data path is correct and data is not corrupt")
+        if device not in ("cuda", "cpu"):
+            raise ValueError("device must either be 'cpu' or 'cuda'")
         
         self.sep = "<|endoftext|>"
         self.clean_text, self.stories, self.encoded_stories, self.all_tokens = self.clean_data()
@@ -32,9 +35,11 @@ class Dataset():
         self.stoi = {ch:i for i, ch in enumerate(self.vocab)}
         self.itos = {i:ch for i, ch in enumerate(self.vocab)}
         assert self.decode_story(self.encode_story(self.clean_text)) == self.clean_text
+        self.device = "cuda" if device == "cuda" and torch.cuda.is_available() else "cpu"
+        print("Dataset being initialized on device: ", self.device)
         
     def clean_data(self):
-        """Data cleaning like removing unneccessary characters
+        """Data cleaning like removing unnecessary characters
 
         Returns:
             text_clean (str): Cleaned final text
@@ -134,9 +139,11 @@ class Dataset():
         # Take a slice of token IDs (e.g., first 1000 tokens) for a manageable sample.
         sample_tokens = encoded_full[:1000]
         sample_data = torch.tensor(sample_tokens, dtype=torch.long)
+        sample_data = sample_data.to(device=self.device)
         x, y = get_batch("train", sample_data, None, 8, 4)
         print("Shape of x (input variables): ", x.shape)
         print("Shape of y (target variables): ", y.shape)
+        print("Device of x/y batch: ", x.device)
         return x, y
     
     def view(self):
@@ -152,6 +159,6 @@ class Dataset():
                 print(f"Context: {self.decode_story(context.tolist())} Target: {self.decode_story([target.tolist()])}")
             print("----------x----------")     
             
-# mock_data = Dataset(data_path="dataset/TinyStories_train_100k.txt")   
-# mock_data.info()
-# mock_data.view()
+mock_data = Dataset(data_path="dataset/TinyStories_train_100k.txt", device="cuda")   
+mock_data.info()
+mock_data.view()
