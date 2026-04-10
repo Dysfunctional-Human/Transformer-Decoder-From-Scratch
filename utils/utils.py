@@ -38,11 +38,23 @@ def get_batch(
             f"data length: ({len(data)}) must be greater than length of the context window: "
             f"{context_window_len} to build x/y batches"
         )
+        
+    # Random starting indices for our context window for selecting input and output
+    ix = torch.randint(
+        low=0,
+        high=len(data)-context_window_len,
+        size=(batch_size,),
+        device=data.device
+    )   # ix -> [batch_size] === Number of indices in a batch
     
-    # List of indices of data to select model input and output
-    ix = torch.randint(low=0, high=len(data)-context_window_len, size=(batch_size,), device=data.device)    # ix -> [batch_size]
-    # token numbers according to stoi that are given as input to the model
-    x = torch.stack([data[i:i + context_window_len] for i in ix]).to(device=data.device)   # x -> [batch_size, context_window_len]
-    # same as x but everything shifted to the right by one (target is predicting the next token)
-    y = torch.stack([data[i + 1: i + context_window_len + 1] for i in ix]).to(device=data.device)  # y -> [batch_size, context_window_len]
+    ## Building the index grid
+    # Gives us a single row of length context_window_size containing numbers in ascending order starting from 1 (1, 2, 3 ...)
+    t = torch.arange(context_window_len, device=data.device)    # t -> [context_window_len]
+    # Broadcasts ix from [batch_size] to [batch_size,1] and t from [context_window_len] to [1,context_window_len] (Essentially adds the numbers until context_window_len from t into ix which contains starting indices)
+    idx = ix[:, None] + t[None, :]  # idx -> [batch_size, context_window_len]
+    
+    # Gathering x and shifted y === x, y -> [batch_size, context_window_len]
+    x = data[idx].to(device=data.device)   # Goes row by row and picks out the tokens at that index of data[row][j]
+    y = data[idx+1].to(device=data.device)  # Same for y but add 1 to all the values of idx because target token should be the next token
+
     return (x, y)

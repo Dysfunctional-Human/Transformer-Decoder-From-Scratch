@@ -8,7 +8,7 @@ from utils.utils import get_batch
 class Dataset():
     """Dataset class for the Decoder model
     """
-    def __init__(self, data_path: str, device = "cuda"):
+    def __init__(self, data_path: str, device = "cuda", debug: bool = False):
         """Initializes the dataset class
 
         Args:
@@ -22,10 +22,10 @@ class Dataset():
         try:
             with open(data_path, "r", encoding='utf-8') as f:
                 self.raw_text = f.read().lower()
-                print("Data loaded")
         except Exception as e:
-            print(f"Error loading data: {e}")
-            raise ValueError(f"Error loading data from the given file: {self.data_path}. Ensure the data path is correct and data is not corrupt")
+            raise ValueError(f"Error loading data from the given file: {self.data_path}." 
+                             f"Ensure the data path is correct and data is not corrupt"
+                             ) from e
         if device not in ("cuda", "cpu"):
             raise ValueError("device must either be 'cpu' or 'cuda'")
         
@@ -34,7 +34,9 @@ class Dataset():
         self.vocab = sorted(set(self.all_tokens))
         self.stoi = {ch:i for i, ch in enumerate(self.vocab)}
         self.itos = {i:ch for i, ch in enumerate(self.vocab)}
-        assert self.decode_story(self.encode_story(self.clean_text)) == self.clean_text
+        if debug:
+            if self.decode_story(self.encode_story(self.clean_text)) != self.clean_text:
+                raise ValueError("Encode/Decode round‑trip validation failed. Check the data and the encode-decode functions")
         self.device = "cuda" if device == "cuda" and torch.cuda.is_available() else "cpu"
         print("Dataset being initialized on device: ", self.device)
         
@@ -159,6 +161,6 @@ class Dataset():
                 print(f"Context: {self.decode_story(context.tolist())} Target: {self.decode_story([target.tolist()])}")
             print("----------x----------")     
             
-mock_data = Dataset(data_path="dataset/TinyStories_train_100k.txt", device="cuda")   
+mock_data = Dataset(data_path="dataset/TinyStories_train_100k.txt", device="cuda", debug=True)   
 mock_data.info()
 mock_data.view()
