@@ -2,4 +2,5 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-torch.manual_seed(1337)
+if __name__ == "__main__":
+    torch.manual_seed(1337)

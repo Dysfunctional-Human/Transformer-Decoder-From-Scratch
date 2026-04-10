@@ -34,7 +34,7 @@ class Dataset():
         assert self.decode_story(self.encode_story(self.clean_text)) == self.clean_text
         
     def clean_data(self):
-        """Data cleaning like removing uneccessary characters
+        """Data cleaning like removing unneccessary characters
 
         Returns:
             text_clean (str): Cleaned final text
@@ -100,7 +100,7 @@ class Dataset():
         """Decodes a list of numbers into their original story
 
         Args:
-            num_list (list[int): list of numbers to be decoded
+            num_list (list[int]): list of numbers to be decoded
 
         Returns:
             str: decoded story
@@ -119,7 +119,7 @@ class Dataset():
         print("Average number of characters per story: ", np.mean([len(story) for story in self.encoded_stories]))
         print("Length of vocabulary: ", len(self.vocab))
         print("Vocabulary:\n", self.vocab)
-        print("Charcter to Number mapping:\n", self.stoi)
+        print("Character to Number mapping:\n", self.stoi)
         print("Number to Character mapping:\n", self.itos)
         
     def sample(self):

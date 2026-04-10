@@ -3,7 +3,7 @@ import torch
 def get_batch(
     split: str, 
     train_data: torch.Tensor, 
-    val_data: torch.Tensor, 
+    val_data: torch.Tensor | None, 
     context_window_len: int, 
     batch_size: int
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -26,7 +26,19 @@ def get_batch(
     if split not in ("train", "val"):
         raise ValueError("split must be one of train or val")
     
-    data = train_data if split == "train" else val_data
+    if split == 'train':
+        data = train_data
+    else:
+        if val_data is None:
+            raise ValueError("val_data must be provided when split is val")
+        data = val_data
+    
+    if len(data) <= context_window_len:
+        raise ValueError(
+            f"data length: ({len(data)}) must be greater than length of the context window: "
+            f"{context_window_len} to build x/y batches"
+        )
+    
     # List of indices of data to select model input and output
     ix = torch.randint(low = 0, high = len(data) - context_window_len, size = (batch_size,))    # ix -> [batch_size]
     # token numbers according to stoi that are given as input to the model
