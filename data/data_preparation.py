@@ -23,8 +23,9 @@ class Dataset():
             with open(data_path, "r", encoding='utf-8') as f:
                 self.raw_text = f.read().lower()
         except Exception as e:
-            raise ValueError(f"Error loading data from the given file: {self.data_path}." 
-                             f"Ensure the data path is correct and data is not corrupt"
+            raise ValueError(f"Error loading data from the given file: {self.data_path}. " 
+                             f"Ensure the data path is correct and data is not corrupted. "
+                             f"Logs: {e}"
                              ) from e
         if device not in ("cuda", "cpu"):
             raise ValueError("device must either be 'cpu' or 'cuda'")
@@ -160,7 +161,8 @@ class Dataset():
                 print(f"When input is: {context.tolist()} the target is: {target}")
                 print(f"Context: {self.decode_story(context.tolist())} Target: {self.decode_story([target.tolist()])}")
             print("----------x----------")     
-            
-mock_data = Dataset(data_path="dataset/TinyStories_train_100k.txt", device="cuda", debug=True)   
-mock_data.info()
-mock_data.view()
+
+if __name__ == "__main__":
+    mock_data = Dataset(data_path="dataset/TinyStories_train_100k.txt", device="cuda", debug=True)   
+    mock_data.info()
+    mock_data.view()

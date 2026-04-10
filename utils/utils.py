@@ -54,7 +54,7 @@ def get_batch(
     idx = ix[:, None] + t[None, :]  # idx -> [batch_size, context_window_len]
     
     # Gathering x and shifted y === x, y -> [batch_size, context_window_len]
-    x = data[idx].to(device=data.device)   # Goes row by row and picks out the tokens at that index of data[row][j]
-    y = data[idx+1].to(device=data.device)  # Same for y but add 1 to all the values of idx because target token should be the next token
+    x = data[idx]   # Goes row by row and picks out the tokens at that index of data[row][j]
+    y = data[idx+1]  # Same for y but add 1 to all the values of idx because target token should be the next token
 
     return (x, y)
