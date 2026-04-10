@@ -129,8 +129,11 @@ class Dataset():
             x (torch.Tensor): Input variable
             y (torch.Tensor): Target variable
         """
-        sample_data = self.clean_text[:1000]
-        sample_data = torch.tensor(self.encode_story(sample_data), dtype=torch.long)
+        # Encode the full cleaned text into token IDs first to avoid slicing in the middle of a separator token.
+        encoded_full = self.encode_story(self.clean_text)
+        # Take a slice of token IDs (e.g., first 1000 tokens) for a manageable sample.
+        sample_tokens = encoded_full[:1000]
+        sample_data = torch.tensor(sample_tokens, dtype=torch.long)
         x, y = get_batch("train", sample_data, None, 8, 4)
         print("Shape of x (input variables): ", x.shape)
         print("Shape of y (target variables): ", y.shape)

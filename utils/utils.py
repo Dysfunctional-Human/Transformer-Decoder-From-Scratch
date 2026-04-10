@@ -40,7 +40,7 @@ def get_batch(
         )
     
     # List of indices of data to select model input and output
-    ix = torch.randint(low = 0, high = len(data) - context_window_len, size = (batch_size,))    # ix -> [batch_size]
+    ix = torch.randint(low=0, high=len(data)-context_window_len, size=(batch_size,))    # ix -> [batch_size]
     # token numbers according to stoi that are given as input to the model
     x = torch.stack([data[i:i + context_window_len] for i in ix])   # x -> [batch_size, context_window_len]
     # same as x but everything shifted to the right by one (target is predicting the next token)
