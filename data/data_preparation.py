@@ -8,7 +8,7 @@ from utils.utils import get_batch
 class Dataset():
     """Dataset class for the Decoder model
     """
-    def __init__(self, data_path: str):
+    def __init__(self, data_path: str, device = "cuda", debug: bool = False):
         """Initializes the dataset class
 
         Args:
@@ -23,18 +23,26 @@ class Dataset():
             with open(data_path, "r", encoding='utf-8') as f:
                 self.raw_text = f.read().lower()
         except Exception as e:
-            print(f"Error loading data: {e}")
-            raise ValueError(f"Error loading data from the given file: {self.data_path}. Ensure the data path is correct and data is not corrupt")
+            raise ValueError(f"Error loading data from the given file: {self.data_path}. " 
+                             f"Ensure the data path is correct and data is not corrupted. "
+                             f"Logs: {e}"
+                             ) from e
+        if device not in ("cuda", "cpu"):
+            raise ValueError("device must either be 'cpu' or 'cuda'")
         
         self.sep = "<|endoftext|>"
         self.clean_text, self.stories, self.encoded_stories, self.all_tokens = self.clean_data()
         self.vocab = sorted(set(self.all_tokens))
         self.stoi = {ch:i for i, ch in enumerate(self.vocab)}
         self.itos = {i:ch for i, ch in enumerate(self.vocab)}
-        assert self.decode_story(self.encode_story(self.clean_text)) == self.clean_text
+        if debug:
+            if self.decode_story(self.encode_story(self.clean_text)) != self.clean_text:
+                raise ValueError("Encode/Decode round‑trip validation failed. Check the data and the encode-decode functions")
+        self.device = "cuda" if device == "cuda" and torch.cuda.is_available() else "cpu"
+        print("Dataset being initialized on device: ", self.device)
         
     def clean_data(self):
-        """Data cleaning like removing unneccessary characters
+        """Data cleaning like removing unnecessary characters
 
         Returns:
             text_clean (str): Cleaned final text
@@ -129,11 +137,16 @@ class Dataset():
             x (torch.Tensor): Input variable
             y (torch.Tensor): Target variable
         """
-        sample_data = self.clean_text[:1000]
-        sample_data = torch.tensor(self.encode_story(sample_data), dtype=torch.long)
+        # Encode the full cleaned text into token IDs first to avoid slicing in the middle of a separator token.
+        encoded_full = self.encode_story(self.clean_text)
+        # Take a slice of token IDs (e.g., first 1000 tokens) for a manageable sample.
+        sample_tokens = encoded_full[:1000]
+        sample_data = torch.tensor(sample_tokens, dtype=torch.long)
+        sample_data = sample_data.to(device=self.device)
         x, y = get_batch("train", sample_data, None, 8, 4)
         print("Shape of x (input variables): ", x.shape)
         print("Shape of y (target variables): ", y.shape)
+        print("Device of x/y batch: ", x.device)
         return x, y
     
     def view(self):
@@ -148,7 +161,8 @@ class Dataset():
                 print(f"When input is: {context.tolist()} the target is: {target}")
                 print(f"Context: {self.decode_story(context.tolist())} Target: {self.decode_story([target.tolist()])}")
             print("----------x----------")     
-            
-# mock_data = Dataset(data_path="dataset/TinyStories_train_100k.txt")   
-# mock_data.info()
-# mock_data.view()
+
+if __name__ == "__main__":
+    mock_data = Dataset(data_path="dataset/TinyStories_train_100k.txt", device="cuda", debug=True)   
+    mock_data.info()
+    mock_data.view()
