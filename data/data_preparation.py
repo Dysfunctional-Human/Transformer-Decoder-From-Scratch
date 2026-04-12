@@ -4,11 +4,17 @@ import numpy as np
 from pprint import pprint
 import torch
 from utils.utils import get_batch
+from typing import List, Tuple
 
 class Dataset():
     """Dataset class for the Decoder model
     """
-    def __init__(self, data_path: str, device = "cuda", debug: bool = False):
+    def __init__(
+        self, 
+        data_path: str, 
+        device = "cuda", 
+        debug: bool = False
+    ):
         """Initializes the dataset class
 
         Args:
@@ -41,7 +47,7 @@ class Dataset():
         self.device = "cuda" if device == "cuda" and torch.cuda.is_available() else "cpu"
         print("Dataset being initialized on device: ", self.device)
         
-    def clean_data(self):
+    def clean_data(self) -> Tuple[str, List[str], List[List[str]], List[str]]:
         """Data cleaning like removing unnecessary characters
 
         Returns:
@@ -84,7 +90,10 @@ class Dataset():
         
         return text_clean, stories, encoded_stories, total_tokens
     
-    def encode_story(self, text: str) -> list:
+    def encode_story(
+        self, 
+        text: str
+    ) -> list:
         """Encodes a story string into a list of numbers 
 
         Args:
@@ -104,7 +113,10 @@ class Dataset():
             c += 1
         return num_list
     
-    def decode_story(self, num_list: list) -> str:
+    def decode_story(
+        self, 
+        num_list: list
+    ) -> str:
         """Decodes a list of numbers into their original story
 
         Args:
@@ -130,7 +142,7 @@ class Dataset():
         print("Character to Number mapping:\n", self.stoi)
         print("Number to Character mapping:\n", self.itos)
         
-    def sample(self):
+    def sample(self) -> Tuple[torch.Tensor, torch.Tensor]:
         """Generates a sample batch of input(x) and target(y) variables
 
         Returns:

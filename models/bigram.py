@@ -1,6 +1,10 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+from utils.utils import save_model, load_model
+from typing import Tuple
+import shutil
+from pathlib import Path
 
 """
 Training sketch for BigramLanguageModel:
@@ -32,31 +36,40 @@ Training sketch for BigramLanguageModel:
 """
 
 class BigramLanguageModel(nn.Module):
-    def __init__(self, vocab_size, batch_size, context_window_len, device = "cuda"):
-        """_summary_
+    def __init__(
+        self, 
+        vocab_size: int,
+        endoftext_token_id: int | None = None
+    ):
+        """Initializes the Bigram Language model. One of the most basic language models
 
         Args:
-            vocab_size (_type_): _description_
-            batch_size (_type_): _description_
-            context_window_len (_type_): _description_
-            device (str, optional): _description_. Defaults to "cuda".
+            vocab_size (int): Vocabulary size of the dataset
+            endoftext_token_id (int | None): Token id for "<|endoftext|>"
         """
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, vocab_size) # (num_embeddings, embed_size)
+        self.endoftext_token_id = endoftext_token_id
         # Each token directly reads off the logits for the next token from a lookup table
         # For this model, embed_size == vocab_size
         # Note that Embedding isn't just a lookup table. This is a learnable weight matrix that gets updated via back propagation in the training loop
         
-    def forward(self, idx: torch.Tensor, targets = None):
-        """_summary_
+    def forward(
+        self, 
+        idx: torch.Tensor, 
+        targets: torch.Tensor | None
+    ) -> Tuple[torch.Tensor, torch.Tensor | None]:
+        """A single forward pass in the model for a batch of data
 
         Args:
-            idx (torch.Tensor): _description_
-            targets (_type_, optional): _description_. Defaults to None.
+            idx (torch.Tensor): matrix of indices of input tokens
+            targets (torch.Tensor | None): matrix of indices of target tokens
 
         Returns:
-            _type_: _description_
+            logits (torch.Tensor): Output logits of the model
+            loss (torch.Tensor | None): Loss function value for the given input and targets
         """
+
         # idx and targets -> [batch_size, context_window_len]
         logits = self.token_embedding_table(idx)
         # logits -> [batch_size, context_window_len, embed_size]
@@ -73,19 +86,25 @@ class BigramLanguageModel(nn.Module):
         
         return logits, loss
 
-    def generate(self, idx: torch.Tensor, max_new_tokens: int):
-        """_summary_
+    def generate(
+        self, 
+        idx: torch.Tensor, 
+        max_new_tokens: int
+    ) -> torch.Tensor:
+        """Generates response from the model based on an initial input. The model keeps generating until either it encounter <|endoftext|> or until
+        it hits number of tokens generated equal to max_new_tokens
 
         Args:
-            idx (torch.Tensor): _description_
-            max_new_tokens (int): _description_
+            idx (torch.Tensor): Index of input token(s)
+            max_new_tokens (int): Maximum number of new tokens model should generate
+        
+        Returns:
+            idx (torch.Tensor): Indices of all input + newly generated tokens
         """
         # idx -> [batch_size, context_window_len]
         # Here, batch_size = 1
         for _ in range(max_new_tokens):
-            # ToDo: Stop generation on encountering "<|endoftext|>"
-            
-            logits, _ = self.forward(idx)
+            logits, _ = self.forward(idx, targets=None)
             # logits -> [batch_size, context_window_len, embed_size] Here logits is 3 dimensional since target is None in the forward method
             logits = logits[:, -1, :]   # Focus only on the previous token (not the entire context window len, only the last time step)
             # logits -> [batch_size, embed_size]
@@ -93,7 +112,32 @@ class BigramLanguageModel(nn.Module):
             idx_next = torch.multinomial(probs, num_samples=1)  # idx_next -> [batch_size]
             # Rather than picking the most probable, sampling from multinomial distribution
             idx = torch.cat((idx, idx_next), dim=1)
+            if self.endoftext_token_id is not None and idx_next[0, 0].item() == self.endoftext_token_id:
+                break
         return idx
         
 if __name__ == "__main__":
     torch.manual_seed(1337)
+        
+    bigram = BigramLanguageModel(vocab_size=52)
+    print("Bigram model: ", bigram)
+    print("State Dictionary of model:", bigram.state_dict())
+    
+    idx = torch.randint(high=52, size=(4,8))
+    targets = torch.randint(high=52, size=(4,8))
+    logits, loss = bigram.forward(idx=idx, targets=targets)
+    print(f"Sample forward pass result: \nOutput logits: {logits}, \nLoss: {loss: .2f}")
+    
+    idx = torch.randint(high=52, size=(1,1))
+    idx = bigram.generate(idx=idx, max_new_tokens=32)
+    print("Text generation sample output: ", idx)
+    
+    save_model(model=bigram, model_name="sample_bigram_model.pt", target_dir="sample_models/bigram", results={"dummy": [2.4]})
+    
+    loaded_model, _ = load_model(model=bigram, target_model_path="sample_models/bigram/sample_bigram_model/sample_bigram_model.pt", model_results_path="sample_models/bigram/sample_bigram_model/results.pt")
+    
+    print("Loaded model's state dict: ", loaded_model.state_dict())
+    
+    sample_dir = Path("sample_models")
+    if sample_dir.exists():
+        shutil.rmtree(sample_dir)
