@@ -93,7 +93,7 @@ class Dataset():
     def encode_story(
         self, 
         text: str
-    ) -> list:
+    ) -> List[int]:
         """Encodes a story string into a list of numbers 
 
         Args:
@@ -115,7 +115,7 @@ class Dataset():
     
     def decode_story(
         self, 
-        num_list: list
+        num_list: List[int]
     ) -> str:
         """Decodes a list of numbers into their original story
 

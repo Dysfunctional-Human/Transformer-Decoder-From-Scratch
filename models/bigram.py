@@ -1,11 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-from utils.utils import save_model, load_model
 from typing import Tuple
-import shutil
-from pathlib import Path
-import tempfile
 
 """
 Training sketch for BigramLanguageModel:
@@ -120,6 +116,11 @@ class BigramLanguageModel(nn.Module):
         return idx
         
 if __name__ == "__main__":
+    from utils.utils import save_model, load_model
+    import shutil
+    from pathlib import Path
+    import tempfile
+    
     torch.manual_seed(1337)
         
     bigram = BigramLanguageModel(vocab_size=52)
@@ -129,7 +130,7 @@ if __name__ == "__main__":
     idx = torch.randint(high=52, size=(4,8))
     targets = torch.randint(high=52, size=(4,8))
     logits, loss = bigram.forward(idx=idx, targets=targets)
-    print(f"Sample forward pass result: \nOutput logits: {logits}, \nLoss: {loss: .2f}")
+    print(f"Sample forward pass result: \nOutput logits: {logits}, \nLoss: {loss.item(): .2f}")
     
     idx = torch.randint(high=52, size=(1,1))
     idx = bigram.generate(idx=idx, max_new_tokens=32)
