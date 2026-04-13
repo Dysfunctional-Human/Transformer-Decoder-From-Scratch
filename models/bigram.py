@@ -107,7 +107,7 @@ class BigramLanguageModel(nn.Module):
             logits = logits[:, -1, :]   # Focus only on the previous token (not the entire context window len, only the last time step)
             # logits -> [batch_size, embed_size]
             probs = F.softmax(logits, dim=1)    # probs -> [batch_size, embed_size]
-            idx_next = torch.multinomial(probs, num_samples=1)  # idx_next -> [batch_size]
+            idx_next = torch.multinomial(probs, num_samples=1)  # idx_next -> [batch_size, 1]
             # Rather than picking the most probable, sampling from multinomial distribution
             idx = torch.cat((idx, idx_next), dim=1)
             # Stop generation when <|endoftext|> token is produced
