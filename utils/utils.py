@@ -103,7 +103,7 @@ def load_model(model: torch.nn.Module,
         model_results_path (str | None): Path to the results dictionary
 
     Returns:
-        torch.nn.Module, Dict[str, List[float] | None]: Model and optional results dictionary
+        torch.nn.Module, Dict[str, List[float]] | None: Model and optional results dictionary
     """
     model_path = Path(target_model_path)
     if not model_path.is_file():
@@ -147,15 +147,17 @@ def estimate_loss(
         out = {}
         model.eval()
         for split in ["train", "val"]:
-            losses = torch.zeros(eval_iters)
+            losses = None
             for k in range(eval_iters):
                 if split == "train":
                     X, Y = get_batch(split=split, train_data=train_data, context_window_len=context_window_len, batch_size=batch_size)
                 elif split == "val":
                     X, Y = get_batch(split=split, train_data=train_data, context_window_len=context_window_len, batch_size=batch_size, val_data=val_data)
                 _, loss = model.forward(X, Y)
-                losses[k] = loss.item()
-            out[split] = losses.mean()
+                if losses is None:
+                    losses = torch.zeros(eval_iters, device=loss.device, dtype=loss.dtype)
+                losses[k] = loss.detach()
+            out[split] = losses.mean().item()
         model.train()
         return out
         
@@ -185,8 +187,12 @@ def plot_model_curves(
     plt.xlabel('Epochs')
     plt.legend()
     if save_path:
+        save_path = Path(save_path)
+        if save_path.parent != Path():
+                save_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(save_path)
         print(f"Saved loss curve to {save_path}")
     else:
         plt.show()
+    plt.close()
     
