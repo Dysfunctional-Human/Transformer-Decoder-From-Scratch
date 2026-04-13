@@ -101,18 +101,19 @@ class BigramLanguageModel(nn.Module):
         # idx -> [batch_size, context_window_len]
         # Ensure batch size is 1 for generation
         assert idx.shape[0] == 1, "generate method only supports batch_size=1"
-        for _ in range(max_new_tokens):
-            logits, _ = self.forward(idx, targets=None)
-            # logits -> [batch_size, context_window_len, embed_size] Here logits is 3 dimensional since target is None in the forward method
-            logits = logits[:, -1, :]   # Focus only on the previous token (not the entire context window len, only the last time step)
-            # logits -> [batch_size, embed_size]
-            probs = F.softmax(logits, dim=1)    # probs -> [batch_size, embed_size]
-            idx_next = torch.multinomial(probs, num_samples=1)  # idx_next -> [batch_size, 1]
-            # Rather than picking the most probable, sampling from multinomial distribution
-            idx = torch.cat((idx, idx_next), dim=1)
-            # Stop generation when <|endoftext|> token is produced
-            if self.endoftext_token_id is not None and idx_next[0, 0].item() == self.endoftext_token_id:
-                break
+        with torch.inference_mode():
+            for _ in range(max_new_tokens):
+                logits, _ = self.forward(idx, targets=None)
+                # logits -> [batch_size, context_window_len, embed_size] Here logits is 3 dimensional since target is None in the forward method
+                logits = logits[:, -1, :]   # Focus only on the previous token (not the entire context window len, only the last time step)
+                # logits -> [batch_size, embed_size]
+                probs = F.softmax(logits, dim=1)    # probs -> [batch_size, embed_size]
+                idx_next = torch.multinomial(probs, num_samples=1)  # idx_next -> [batch_size, 1]
+                # Rather than picking the most probable, sampling from multinomial distribution
+                idx = torch.cat((idx, idx_next), dim=1)
+                # Stop generation when <|endoftext|> token is produced
+                if self.endoftext_token_id is not None and idx_next[0, 0].item() == self.endoftext_token_id:
+                    break
         return idx
         
 if __name__ == "__main__":
