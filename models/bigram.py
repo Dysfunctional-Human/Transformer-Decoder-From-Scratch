@@ -5,6 +5,7 @@ from utils.utils import save_model, load_model
 from typing import Tuple
 import shutil
 from pathlib import Path
+import tempfile
 
 """
 Training sketch for BigramLanguageModel:
@@ -57,7 +58,7 @@ class BigramLanguageModel(nn.Module):
     def forward(
         self, 
         idx: torch.Tensor, 
-        targets: torch.Tensor | None
+        targets: torch.Tensor | None = None
     ) -> Tuple[torch.Tensor, torch.Tensor | None]:
         """A single forward pass in the model for a batch of data
 
@@ -102,7 +103,8 @@ class BigramLanguageModel(nn.Module):
             idx (torch.Tensor): Indices of all input + newly generated tokens
         """
         # idx -> [batch_size, context_window_len]
-        # Here, batch_size = 1
+        # Ensure batch size is 1 for generation
+        assert idx.shape[0] == 1, "generate method only supports batch_size=1"
         for _ in range(max_new_tokens):
             logits, _ = self.forward(idx, targets=None)
             # logits -> [batch_size, context_window_len, embed_size] Here logits is 3 dimensional since target is None in the forward method
@@ -112,6 +114,7 @@ class BigramLanguageModel(nn.Module):
             idx_next = torch.multinomial(probs, num_samples=1)  # idx_next -> [batch_size]
             # Rather than picking the most probable, sampling from multinomial distribution
             idx = torch.cat((idx, idx_next), dim=1)
+            # Stop generation when <|endoftext|> token is produced
             if self.endoftext_token_id is not None and idx_next[0, 0].item() == self.endoftext_token_id:
                 break
         return idx
@@ -132,12 +135,27 @@ if __name__ == "__main__":
     idx = bigram.generate(idx=idx, max_new_tokens=32)
     print("Text generation sample output: ", idx)
     
-    save_model(model=bigram, model_name="sample_bigram_model.pt", target_dir="sample_models/bigram", results={"dummy": [2.4]})
+    # temporary directory for demo 
+    temp_base = Path(tempfile.mkdtemp(prefix="bigram_demo_"))
+    demo_dir = temp_base / "bigram"
     
-    loaded_model, _ = load_model(model=bigram, target_model_path="sample_models/bigram/sample_bigram_model/sample_bigram_model.pt", model_results_path="sample_models/bigram/sample_bigram_model/results.pt")
-    
+    # Saving model and results in the temporary demo directory
+    save_model(
+        model=bigram,
+        model_name="sample_bigram_model.pt",
+        target_dir=str(demo_dir),
+        results={"dummy": [2.4]},
+    )
+
+    loaded_model, _ = load_model(
+        model=bigram,
+        target_model_path=str(demo_dir / "sample_bigram_model" / "sample_bigram_model.pt"),
+        model_results_path=str(demo_dir / "sample_bigram_model" / "results.pt"),
+    )
+
     print("Loaded model's state dict: ", loaded_model.state_dict())
-    
-    sample_dir = Path("sample_models")
-    if sample_dir.exists():
-        shutil.rmtree(sample_dir)
+
+    # Clean up only the temporary demo directory we created
+    if temp_base.exists():
+        shutil.rmtree(temp_base)
+
