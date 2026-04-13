@@ -66,7 +66,6 @@ def save_model(
     model: torch.nn.Module, 
     target_dir: str, 
     model_name: str, 
-    results: Dict[str, List[float]]
 ):
     """Saves the model
 
@@ -87,6 +86,24 @@ def save_model(
     
     print(f"Saving model and training results to: {model_save_path}")
     torch.save(obj=model.state_dict(), f=model_save_path)
+
+def save_results(
+    target_dir: str, 
+    model_name: str, 
+    results: Dict[str, List[float]]
+):
+    """Saves the model results
+
+    Args:
+        target_dir (str): The parent directory where the model needs to be saved
+        model_name (str): Name for saving the model
+        results (Dict[str, List[float]]): Model's results dictionary
+    """
+    dir_path = Path(target_dir)
+    dir_path.mkdir(parents=True, exist_ok=True)
+    
+    target_dir_path = dir_path / Path(model_name).stem
+    target_dir_path.mkdir(parents=True, exist_ok=True)
     
     results_save_path = target_dir_path / "results.pt"
     torch.save(results, results_save_path)
@@ -180,7 +197,7 @@ def plot_model_curves(
 
     epochs = range(len(results['train_loss']))
 
-    plt.figure(figsize=(7,7))
+    plt.figure(figsize=(15,15))
     plt.plot(epochs, loss, label="train_loss")
     plt.plot(epochs, test_loss, label='test_loss')
     plt.title('Loss')
