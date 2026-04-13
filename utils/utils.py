@@ -130,7 +130,7 @@ def estimate_loss(
     context_window_len: int,
     batch_size: int
 ) -> Dict[str, float]:    
-    """Train and Test loss calculations
+    """Train and Val loss calculations
 
     Args:
         model (torch.nn.Module): Model to be used
@@ -189,7 +189,7 @@ def plot_model_curves(
     if save_path:
         save_path = Path(save_path)
         if save_path.parent != Path():
-                save_path.parent.mkdir(parents=True, exist_ok=True)
+            save_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(save_path)
         print(f"Saved loss curve to {save_path}")
     else:
