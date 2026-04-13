@@ -155,7 +155,7 @@ class Dataset():
         sample_tokens = encoded_full[:1000]
         sample_data = torch.tensor(sample_tokens, dtype=torch.long)
         sample_data = sample_data.to(device=self.device)
-        x, y = get_batch("train", sample_data, None, 8, 4)
+        x, y = get_batch(split="train", train_data=sample_data, val_data=None, context_window_len=8, batch_size=4)
         print("Shape of x (input variables): ", x.shape)
         print("Shape of y (target variables): ", y.shape)
         print("Device of x/y batch: ", x.device)

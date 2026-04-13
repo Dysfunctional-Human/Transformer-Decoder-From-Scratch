@@ -1,14 +1,15 @@
 import torch
 from pathlib import Path
 from typing import List, Dict, Tuple
+import matplotlib.pyplot as plt
 
 def get_batch(
     split: str, 
-    train_data: torch.Tensor, 
-    val_data: torch.Tensor | None, 
     context_window_len: int, 
-    batch_size: int
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    batch_size: int,
+    train_data: torch.Tensor, 
+    val_data: torch.Tensor | None = None, 
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """Returns x and y tensors from train/val tensors. Both x and y are of shape (batch_size, context_window_len)
 
     Args:
@@ -66,14 +67,14 @@ def save_model(
     target_dir: str, 
     model_name: str, 
     results: Dict[str, List[float]]
-    ):
-    """_summary_
+):
+    """Saves the model
 
     Args:
-        model (torch.nn.Module): _description_
-        target_dir (str): _description_
-        model_name (str): _description_
-        results (Dict[str, List[float]]): _description_
+        model (torch.nn.Module): The trained model
+        target_dir (str): The parent directory where the model needs to be saved
+        model_name (str): Name for saving the model
+        results (Dict[str, List[float]]): Model's results dictionary
     """
     dir_path = Path(target_dir)
     dir_path.mkdir(parents=True, exist_ok=True)
@@ -92,16 +93,17 @@ def save_model(
     
 def load_model(model: torch.nn.Module,
                target_model_path: str,
-               model_results_path: str | None
-               ) -> Tuple[torch.nn.Module, Dict[str, List[float]]]:
-    """_summary_
+               model_results_path: str | None = None
+) -> Tuple[torch.nn.Module, Dict[str, List[float]] | None]:
+    """Load the model and results (optional) dictionary 
 
     Args:
-        model (torch.nn.Module): _description_
-        target_model_path (str): _description_
+        model (torch.nn.Module): The base class for the model to be loaded into
+        target_model_path (str): Path to the model
+        model_results_path (str | None): Path to the results dictionary
 
     Returns:
-        torch.nn.Module, Dict[str, List[float]]: _description_
+        torch.nn.Module, Dict[str, List[float]] | None: Model and optional results dictionary
     """
     model_path = Path(target_model_path)
     if not model_path.is_file():
@@ -120,6 +122,77 @@ def load_model(model: torch.nn.Module,
     
     return model, results 
     
-# def estimate_loss():    
+def estimate_loss(
+    model: torch.nn.Module,
+    train_data: torch.Tensor,
+    val_data: torch.Tensor,
+    eval_iters: int,
+    context_window_len: int,
+    batch_size: int
+) -> Dict[str, float]:    
+    """Train and Val loss calculations
 
-# def plot_model_curves():
+    Args:
+        model (torch.nn.Module): Model to be used
+        train_data (torch.Tensor): Training data
+        val_data (torch.Tensor): Validation data
+        eval_iters (int): Number of iterations of evaluation
+        context_window_len (int): Length of context window of the model
+        batch_size (int): Batch size for the data
+
+    Returns:
+        Dict[str, float]: Dictionary containing loss according to split
+    """
+    with torch.inference_mode():
+        out = {}
+        model.eval()
+        for split in ["train", "val"]:
+            losses = None
+            for k in range(eval_iters):
+                if split == "train":
+                    X, Y = get_batch(split=split, train_data=train_data, context_window_len=context_window_len, batch_size=batch_size)
+                elif split == "val":
+                    X, Y = get_batch(split=split, train_data=train_data, context_window_len=context_window_len, batch_size=batch_size, val_data=val_data)
+                _, loss = model.forward(X, Y)
+                if losses is None:
+                    losses = torch.zeros(eval_iters, device=loss.device, dtype=loss.dtype)
+                losses[k] = loss.detach()
+            out[split] = losses.mean().item()
+        model.train()
+        return out
+        
+
+def plot_model_curves(
+    results: Dict[str, List[float]],
+    save_path: str | None = None,
+) -> None:
+    """Plot training and test loss curves.
+
+    If ``save_path`` is provided, the plot is saved to that location using
+    ``matplotlib.pyplot.savefig``; otherwise the plot is displayed interactively.
+    
+    Args:
+        results (Dict[str, List[float]]): Results dictionary to be used for plotting
+        save_path (str | None, optional): Path for saving the plots. Defaults to None.
+    """
+    loss = results['train_loss']
+    test_loss = results['test_loss']
+
+    epochs = range(len(results['train_loss']))
+
+    plt.figure(figsize=(7,7))
+    plt.plot(epochs, loss, label="train_loss")
+    plt.plot(epochs, test_loss, label='test_loss')
+    plt.title('Loss')
+    plt.xlabel('Epochs')
+    plt.legend()
+    if save_path:
+        save_path = Path(save_path)
+        if save_path.parent != Path():
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(save_path)
+        print(f"Saved loss curve to {save_path}")
+    else:
+        plt.show()
+    plt.close()
+    
