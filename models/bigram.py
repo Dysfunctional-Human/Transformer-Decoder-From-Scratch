@@ -146,13 +146,11 @@ if __name__ == "__main__":
         model=bigram,
         model_name="sample_bigram_model.pt",
         target_dir=str(demo_dir),
-        results={"dummy": [2.4]},
     )
 
-    loaded_model, _ = load_model(
+    loaded_model = load_model(
         model=bigram,
         target_model_path=str(demo_dir / "sample_bigram_model" / "sample_bigram_model.pt"),
-        model_results_path=str(demo_dir / "sample_bigram_model" / "results.pt"),
     )
 
     print("Loaded model's state dict: ", loaded_model.state_dict())

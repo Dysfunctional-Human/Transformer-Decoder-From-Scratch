@@ -68,7 +68,7 @@ def save_model(
     target_dir: str, 
     model_name: str, 
 ):
-    """Saves the model
+    """Saves the model's state dictionary (device:cpu)
 
     Args:
         model (torch.nn.Module): The trained model
@@ -91,7 +91,7 @@ def save_model(
 def load_model(model: torch.nn.Module,
                target_model_path: str,
 ) -> torch.nn.Module:
-    """Loads the Language Model
+    """Loads the Language Model on cpu
 
     Args:
         model (torch.nn.Module): Base class to use for loading model's state dictionary
@@ -131,8 +131,8 @@ def save_results(
     target_dir_path.mkdir(parents=True, exist_ok=True)
     
     results_save_path = target_dir_path / "results.json"
-    with open(results_save_path, "w") as f:
-        json.dump(results, f)
+    with open(results_save_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, ensure_ascii=True)
     print("Results saved successfully at: ", target_dir_path)
     
 def load_results(

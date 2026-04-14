@@ -2,11 +2,98 @@ import torch
 from tqdm.auto import tqdm
 from data.data_preparation import Dataset, build_shared_tokenizer, save_tokenizer_artifacts, load_tokenizer_artifacts
 from utils.utils import get_batch, save_model, plot_model_curves, save_results
-from typing import Dict
+from typing import Dict, Tuple
 from models.bigram import BigramLanguageModel
 from datetime import datetime
 from pathlib import Path
 from typing import List
+from configs import bigram_config
+
+def get_tokenizer_artifacts() -> Tuple[List[str], Dict[str, int], Dict[int, str]]:
+    """Gets tokenizer artifacts based on config 
+
+    Returns:
+        Tuple[List[str], Dict[str, int], Dict[int, str]]: vocab, stoi, itos for the dataset
+    """
+    vocab, stoi, itos = None, None, None
+    if bigram_config.USE_SHARED_TOKENIZER:
+        if bigram_config.REBUILD_SHARED_TOKENIZER:
+            vocab, stoi, itos = build_shared_tokenizer(
+                dataset_paths=[
+                    bigram_config.TRAIN_PATH, 
+                    bigram_config.VAL_PATH
+                ]
+            )
+            save_tokenizer_artifacts(
+                target_dir=bigram_config.TOKENIZER_DIR,
+                vocab=vocab, 
+                stoi=stoi,
+                itos=itos
+            )
+        else:
+            try:
+                vocab, stoi, itos = load_tokenizer_artifacts(
+                    target_dir=bigram_config.TOKENIZER_DIR
+                )
+            except FileNotFoundError:
+                vocab, stoi, itos = build_shared_tokenizer(
+                    dataset_paths=[
+                        bigram_config.TRAIN_PATH, 
+                        bigram_config.VAL_PATH
+                    ]
+                )
+                save_tokenizer_artifacts(
+                    target_dir=bigram_config.TOKENIZER_DIR,
+                    vocab=vocab,
+                    stoi=stoi,
+                    itos=itos
+                )
+    return vocab, stoi, itos
+
+def prepare_data(
+    vocab: List[str] | None,
+    stoi: Dict[str, int] | None,
+    itos: Dict[int, str] | None
+) -> Tuple[Dataset, Dataset]:
+    """Prepares datasets for model training based on config
+
+    Args:
+        vocab (List[str] | None): Shared vocabulary
+        stoi (Dict[str, int] | None): string-to-int mapping
+        itos (Dict[int, str] | None): int-to-string mapping
+
+    Returns:
+        Tuple[Dataset, Dataset]: Training and Testing/Validation datasets
+    """
+    if bigram_config.USE_SHARED_TOKENIZER:
+        TRAIN_DATA = Dataset(
+            data_path=bigram_config.TRAIN_PATH, 
+            device=bigram_config.DEVICE, 
+            debug=bigram_config.DEBUG,
+            vocab=vocab,
+            stoi=stoi,
+            itos=itos
+        )
+        VAL_DATA = Dataset(
+            data_path=bigram_config.VAL_PATH, 
+            device=bigram_config.DEVICE, 
+            debug=bigram_config.DEBUG,
+            vocab=vocab,
+            stoi=stoi,
+            itos=itos
+        )
+    else:
+        TRAIN_DATA = Dataset(
+            data_path=bigram_config.TRAIN_PATH, 
+            device=bigram_config.DEVICE, 
+            debug=bigram_config.DEBUG,
+        )
+        VAL_DATA = Dataset(
+            data_path=bigram_config.VAL_PATH, 
+            device=bigram_config.DEVICE, 
+            debug=bigram_config.DEBUG,
+        )
+    return TRAIN_DATA, VAL_DATA
 
 def train_step(
     model: BigramLanguageModel,
@@ -77,7 +164,7 @@ def test_step(
 
 def engine(
     train_data: Dataset,
-    device: torch.device,
+    device: str,
     val_data: Dataset,
     model: BigramLanguageModel,
     optimizer: torch.optim.Optimizer,
@@ -89,7 +176,7 @@ def engine(
 
     Args:
         train_data (Dataset): Dataset for training
-        device (torch.device): Device to conduct training on ('cpu' or 'cuda')
+        device (str): Device to conduct training on ('cpu' or 'cuda')
         val_data (Dataset): Dataset for testing/validation
         model (BigramLanguageModel): Model to be trained
         optimizer (torch.optim.Optimizer): Optimizer to be used to update model params
@@ -187,87 +274,26 @@ def engine(
     return results
 
 if __name__ == "__main__":
-    # ToDo
-    # Create a generate from bigram model script similar to this one
     
-    USE_SHARED_TOKENIZER = True
-    REBUILD_SHARED_TOKENIZER = False
-    TOKENIZER_DIR = "corpus"
-    TRAIN_PATH = "dataset/TinyStories_train_100k.txt"
-    VAL_PATH = "dataset/TinyStories_valid_5k.txt"
-    
-    vocab = None
-    stoi = None
-    itos = None
-    
-    if USE_SHARED_TOKENIZER:
-        if REBUILD_SHARED_TOKENIZER:
-            vocab, stoi, itos = build_shared_tokenizer(
-                dataset_paths=[TRAIN_PATH, VAL_PATH]
-            )
-            save_tokenizer_artifacts(
-                target_dir=TOKENIZER_DIR,
-                vocab=vocab, 
-                stoi=stoi,
-                itos=itos
-            )
-        else:
-            try:
-                vocab, stoi, itos = load_tokenizer_artifacts(target_dir=TOKENIZER_DIR)
-            except FileNotFoundError:
-                vocab, stoi, itos = build_shared_tokenizer(
-                    dataset_paths=[TRAIN_PATH, VAL_PATH]
-                )
-                save_tokenizer_artifacts(
-                    target_dir=TOKENIZER_DIR,
-                    vocab=vocab,
-                    stoi=stoi,
-                    itos=itos
-                )
-    
-        TRAIN_DATA = Dataset(
-            data_path="dataset/TinyStories_train_100k.txt", 
-            device="cuda", 
-            debug=True,
-            vocab=vocab,
-            stoi=stoi,
-            itos=itos
-        )
-        VAL_DATA = Dataset(
-            data_path="dataset/TinyStories_valid_5k.txt", 
-            device="cuda", 
-            debug=True,
-            vocab=vocab,
-            stoi=stoi,
-            itos=itos
-        )
-    else:
-        TRAIN_DATA = Dataset(
-            data_path="dataset/TinyStories_train_100k.txt", 
-            device="cuda", 
-            debug=True,
-        )
-        VAL_DATA = Dataset(
-            data_path="dataset/TinyStories_valid_5k.txt", 
-            device="cuda", 
-            debug=True,
-        )
-        
+    vocab, stoi, itos = get_tokenizer_artifacts()
+    TRAIN_DATA, VAL_DATA = prepare_data(
+        vocab=vocab,
+        stoi=stoi,
+        itos=itos
+    )
     MODEL = BigramLanguageModel(
         vocab_size=len(TRAIN_DATA.vocab), 
         endoftext_token_id=TRAIN_DATA.stoi["<|endoftext|>"]
-    ).to(TRAIN_DATA.device)
-    LEARNING_RATE = 1e-2
-    optimizer = torch.optim.AdamW(
-        params=MODEL.parameters(), 
-        lr=LEARNING_RATE
     )
-    EPOCHS = 1000
-    CONTEXT_WINDOW_LEN = 8
-    BATCH_SIZE = 4
-    
+    OPTIMIZER = torch.optim.AdamW(
+        params=MODEL.parameters(), 
+        lr=bigram_config.LEARNING_RATE
+    )
     print(
         "Training starting with the following config: "
+        f"{bigram_config}"
+        f"{TRAIN_DATA, VAL_DATA}"
+        f"{MODEL, OPTIMIZER}"
     )
     
     engine(
@@ -275,8 +301,8 @@ if __name__ == "__main__":
         device=TRAIN_DATA.device,
         val_data=VAL_DATA,
         model=MODEL,
-        optimizer=optimizer,
-        epochs=EPOCHS,
-        context_window_len=CONTEXT_WINDOW_LEN,
-        batch_size=BATCH_SIZE,
+        optimizer=OPTIMIZER,
+        epochs=bigram_config.EPOCHS,
+        context_window_len=bigram_config.CONTEXT_WINDOW_LEN,
+        batch_size=bigram_config.BATCH_SIZE,
     )

@@ -159,14 +159,9 @@ class Dataset():
             if self.unk_token not in self.stoi:
                 raise ValueError(f"Shared tokenizer is missing {self.unk_token} token.")
         else:
-            self.vocab = sorted(set(self.all_tokens))
+            self.vocab = sorted(set(self.all_tokens) | {self.sep, self.unk_token})
             self.stoi = {ch:i for i, ch in enumerate(self.vocab)}
             self.itos = {i:ch for i, ch in enumerate(self.vocab)}
-        
-            if self.sep not in self.stoi:
-                raise ValueError("Your tokenizer is missing '<|endoftext|>' token.")
-            if self.unk_token not in self.stoi:
-                raise ValueError(f"Your tokenizer is missing {self.unk_token} token.")
         
         if debug:
             if self.decode_story(self.encode_story(self.clean_text)) != self.clean_text:
