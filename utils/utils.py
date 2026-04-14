@@ -2,6 +2,7 @@ import torch
 from pathlib import Path
 from typing import List, Dict, Tuple
 import matplotlib.pyplot as plt
+import json
 
 def get_batch(
     split: str, 
@@ -73,7 +74,6 @@ def save_model(
         model (torch.nn.Module): The trained model
         target_dir (str): The parent directory where the model needs to be saved
         model_name (str): Name for saving the model
-        results (Dict[str, List[float]]): Model's results dictionary
     """
     dir_path = Path(target_dir)
     dir_path.mkdir(parents=True, exist_ok=True)
@@ -84,8 +84,33 @@ def save_model(
     assert model_name.endswith(('.pth', '.pt')), "model_name should end with '.pt' or '.pth'"
     model_save_path = target_dir_path / model_name
     
-    print(f"Saving model and training results to: {model_save_path}")
-    torch.save(obj=model.state_dict(), f=model_save_path)
+    print(f"Saving model to: {model_save_path}")
+    state_dict = {key: value.detach().cpu() for key, value in model.state_dict().items()}
+    torch.save(state_dict, model_save_path)
+        
+def load_model(model: torch.nn.Module,
+               target_model_path: str,
+) -> torch.nn.Module:
+    """Loads the Language Model
+
+    Args:
+        model (torch.nn.Module): Base class to use for loading model's state dictionary
+        target_model_path (str): Model weights' location
+
+    Raises:
+        FileNotFoundError: Model state dictionary not found at given path
+
+    Returns:
+        torch.nn.Module: loaded language model
+    """
+    model_path = Path(target_model_path)
+    if not model_path.is_file():
+        raise FileNotFoundError(f"Model not found: {model_path}")
+    
+    state_dict = torch.load(model_path, map_location="cpu")
+    model.to('cpu').load_state_dict(state_dict=state_dict)
+
+    return model 
 
 def save_results(
     target_dir: str, 
@@ -105,39 +130,26 @@ def save_results(
     target_dir_path = dir_path / Path(model_name).stem
     target_dir_path.mkdir(parents=True, exist_ok=True)
     
-    results_save_path = target_dir_path / "results.pt"
-    torch.save(results, results_save_path)
+    results_save_path = target_dir_path / "results.json"
+    with open(results_save_path, "w") as f:
+        json.dump(results, f)
+    print("Results saved successfully at: ", target_dir_path)
     
-def load_model(model: torch.nn.Module,
-               target_model_path: str,
-               model_results_path: str | None = None
-) -> Tuple[torch.nn.Module, Dict[str, List[float]] | None]:
-    """Load the model and results (optional) dictionary 
+def load_results(
+    results_path: str
+) -> Dict[str, List[float]]:
+    """Loads model results from training time
 
     Args:
-        model (torch.nn.Module): The base class for the model to be loaded into
-        target_model_path (str): Path to the model
-        model_results_path (str | None): Path to the results dictionary
+        results_path (str): Path for results json file location
 
     Returns:
-        torch.nn.Module, Dict[str, List[float]] | None: Model and optional results dictionary
+        Dict[str, List[float]]: Results dictionary for the model
     """
-    model_path = Path(target_model_path)
-    if not model_path.is_file():
-        raise FileNotFoundError(f"Model not found: {model_path}")
-    
-    state_dict = torch.load(model_path, map_location="cpu")
-    model.load_state_dict(state_dict=state_dict)
-    
-    results = None
-    if model_results_path:
-        results_path = Path(model_results_path)
-        if not results_path.is_file():
-            raise FileNotFoundError(f"Results file not found: {results_path}")
-    
-        results: Dict[str, List[float]] = torch.load(results_path)
-    
-    return model, results 
+    with open(results_path, "r", encoding="utf-8") as f:
+        results = json.load(f)
+    print("Results loaded successfully")
+    return results
     
 def estimate_loss(
     model: torch.nn.Module,
