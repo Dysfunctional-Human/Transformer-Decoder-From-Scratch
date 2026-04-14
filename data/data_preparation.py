@@ -85,7 +85,7 @@ def build_shared_tokenizer(
     Args:
         dataset_paths (List[str]): List of dataset paths
         sep (str, optional): Separator token (token used to end a story). Defaults to "<|endoftext|>".
-        unk (str, optional): Unknown token (for words not in vocab). Defaults to "<|unk|>".
+        unk_token (str, optional): Unknown token (for words not in vocab). Defaults to "<|unk|>".
 
     Returns:
         Tuple[List[str], Dict[str, int], Dict[int, str]]: vocab, stoi, itos
@@ -125,7 +125,7 @@ class Dataset():
             vocab (Optional[List[str]], optional): Shared vocabulary to use (if any). Defaults to None.
             stoi (Optional[Dict[str, int]], optional): Shared stoi dictionary to use (if any). Defaults to None.
             itos (Optional[Dict[int, str]], optional): Shared itos dictionary to use (if any). Defaults to None.
-            unk (str, optional): Unknown token (for words not in vocab). Defaults to "<|unk|>".
+            unk_token (str, optional): Unknown token (for words not in vocab). Defaults to "<|unk|>".
         """
         self.data_path = data_path
         self.raw_text = None

@@ -12,6 +12,7 @@ Model training pipeline -> train step -> test step -> Keep printing train and te
 ToDo
 Create a generate from bigram model script similar to this one
 
+Done
 make config files rather than directly hardcoding in training pipeline
 config_bigram.py
 config_attention.py
@@ -22,3 +23,10 @@ Add trained_models/ to .gitignore and remove the committed artifacts - done
 Add requirements.txt
 Switch save_results to JSON - done
 Fix the CPU-safe state_dict saving  - done
+
+Add positional encoding
+Add self attention
+Add multi-head attention
+Add feed forward networks
+Add Layer/Batch Norm
+Add Skip connections

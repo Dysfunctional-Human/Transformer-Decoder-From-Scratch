@@ -141,7 +141,7 @@ if __name__ == "__main__":
     temp_base = Path(tempfile.mkdtemp(prefix="bigram_demo_"))
     demo_dir = temp_base / "bigram"
     
-    # Saving model and results in the temporary demo directory
+    # Saving model in the temporary demo directory
     save_model(
         model=bigram,
         model_name="sample_bigram_model.pt",
