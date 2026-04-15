@@ -47,7 +47,7 @@ def save_tokenizer_artifacts(
                 "unk_token": unk
             }, f, ensure_ascii=True
         )
-    print("Tokenizer artifacts successfully saved at: ", target_dir)
+    print("Tokenizer artifacts saved successfully at: ", target_dir)
         
 def load_tokenizer_artifacts(
     target_dir: str
@@ -72,7 +72,7 @@ def load_tokenizer_artifacts(
         itos_json = json.load(f)
     
     itos = {int(k): v for k, v in itos_json.items()}
-    print("Tokenizer artifacts successfully loaded")
+    print("Tokenizer artifacts loaded successfully")
     return vocab, stoi, itos
 
 def build_shared_tokenizer(
@@ -137,8 +137,8 @@ class Dataset():
                              f"Ensure the data path is correct and data is not corrupted. "
                              f"Logs: {e}"
                              ) from e
-        if device not in ("cuda", "cpu"):
-            raise ValueError("device must either be 'cpu' or 'cuda'")
+        if device not in ("cuda", "cpu", "mps"):
+            raise ValueError("device must either be 'cpu', 'cuda' or 'mps'")
         
         self.sep = "<|endoftext|>"
         self.unk_token = unk_token
@@ -166,7 +166,12 @@ class Dataset():
         if debug:
             if self.decode_story(self.encode_story(self.clean_text)) != self.clean_text:
                 raise ValueError("Encode/Decode round‑trip validation failed. Check the data and the encode-decode functions")
-        self.device = "cuda" if device == "cuda" and torch.cuda.is_available() else "cpu"
+        if device == "cuda" and torch.cuda.is_available():
+            self.device = "cuda"
+        elif device == "mps" and torch.mps.is_available():
+            self.device = "mps"
+        else:
+            self.device = "cpu"
         print("Dataset being initialized on device: ", self.device)
         
     @staticmethod   # Making this static so it can be used outside the class without object initialization    

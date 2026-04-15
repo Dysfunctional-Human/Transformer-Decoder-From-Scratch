@@ -7,11 +7,10 @@ from tqdm.auto import tqdm
 from data.data_preparation import Dataset, build_shared_tokenizer, save_tokenizer_artifacts, load_tokenizer_artifacts
 from utils.utils import get_batch, save_model, plot_model_curves, save_results
 from typing import Dict, Tuple
-from models.bigram import BigramLanguageModel
 from datetime import datetime
 from pathlib import Path
 from typing import List
-from configs import bigram_config
+from configs import config
 
 def get_tokenizer_artifacts() -> Tuple[List[str], Dict[str, int], Dict[int, str]]:
     """Gets tokenizer artifacts based on config 
@@ -20,16 +19,16 @@ def get_tokenizer_artifacts() -> Tuple[List[str], Dict[str, int], Dict[int, str]
         Tuple[List[str], Dict[str, int], Dict[int, str]]: vocab, stoi, itos for the dataset
     """
     vocab, stoi, itos = None, None, None
-    if bigram_config.USE_SHARED_TOKENIZER:
-        if bigram_config.REBUILD_SHARED_TOKENIZER:
+    if config.USE_SHARED_TOKENIZER:
+        if config.REBUILD_SHARED_TOKENIZER:
             vocab, stoi, itos = build_shared_tokenizer(
                 dataset_paths=[
-                    bigram_config.TRAIN_PATH, 
-                    bigram_config.VAL_PATH
+                    config.TRAIN_PATH, 
+                    config.VAL_PATH
                 ]
             )
             save_tokenizer_artifacts(
-                target_dir=bigram_config.TOKENIZER_DIR,
+                target_dir=config.TOKENIZER_DIR,
                 vocab=vocab, 
                 stoi=stoi,
                 itos=itos
@@ -37,17 +36,17 @@ def get_tokenizer_artifacts() -> Tuple[List[str], Dict[str, int], Dict[int, str]
         else:
             try:
                 vocab, stoi, itos = load_tokenizer_artifacts(
-                    target_dir=bigram_config.TOKENIZER_DIR
+                    target_dir=config.TOKENIZER_DIR
                 )
             except FileNotFoundError:
                 vocab, stoi, itos = build_shared_tokenizer(
                     dataset_paths=[
-                        bigram_config.TRAIN_PATH, 
-                        bigram_config.VAL_PATH
+                        config.TRAIN_PATH, 
+                        config.VAL_PATH
                     ]
                 )
                 save_tokenizer_artifacts(
-                    target_dir=bigram_config.TOKENIZER_DIR,
+                    target_dir=config.TOKENIZER_DIR,
                     vocab=vocab,
                     stoi=stoi,
                     itos=itos
@@ -69,38 +68,38 @@ def prepare_data(
     Returns:
         Tuple[Dataset, Dataset]: Training and Testing/Validation datasets
     """
-    if bigram_config.USE_SHARED_TOKENIZER:
+    if config.USE_SHARED_TOKENIZER:
         TRAIN_DATA = Dataset(
-            data_path=bigram_config.TRAIN_PATH, 
-            device=bigram_config.DEVICE, 
-            debug=bigram_config.DEBUG,
+            data_path=config.TRAIN_PATH, 
+            device=config.DEVICE, 
+            debug=config.DEBUG,
             vocab=vocab,
             stoi=stoi,
             itos=itos
         )
         VAL_DATA = Dataset(
-            data_path=bigram_config.VAL_PATH, 
-            device=bigram_config.DEVICE, 
-            debug=bigram_config.DEBUG,
+            data_path=config.VAL_PATH, 
+            device=config.DEVICE, 
+            debug=config.DEBUG,
             vocab=vocab,
             stoi=stoi,
             itos=itos
         )
     else:
         TRAIN_DATA = Dataset(
-            data_path=bigram_config.TRAIN_PATH, 
-            device=bigram_config.DEVICE, 
-            debug=bigram_config.DEBUG,
+            data_path=config.TRAIN_PATH, 
+            device=config.DEVICE, 
+            debug=config.DEBUG,
         )
         VAL_DATA = Dataset(
-            data_path=bigram_config.VAL_PATH, 
-            device=bigram_config.DEVICE, 
-            debug=bigram_config.DEBUG,
+            data_path=config.VAL_PATH, 
+            device=config.DEVICE, 
+            debug=config.DEBUG,
         )
     return TRAIN_DATA, VAL_DATA
 
 def train_step(
-    model: BigramLanguageModel,
+    model: torch.nn.Module,
     train_data: torch.Tensor,
     optimizer: torch.optim.Optimizer,
     context_window_len: int,
@@ -109,7 +108,7 @@ def train_step(
     """A single training step
 
     Args:
-        model (BigramLanguageModel): Model under training
+        model (torch.nn.Module): Model under training
         train_data (torch.Tensor): Training data
         optimizer (torch.optim.Optimizer): Optimizer to be used
         context_window_len (int): Length of context window to be considered
@@ -134,7 +133,7 @@ def train_step(
     return train_loss.item()
 
 def test_step(
-    model: BigramLanguageModel,
+    model: torch.nn.Module,
     train_data: torch.Tensor, 
     val_data: torch.Tensor,
     context_window_len: int,
@@ -143,7 +142,7 @@ def test_step(
     """A single testing step
 
     Args:
-        model (BigramLanguageModel): Model under training
+        model (torch.nn.Module): Model under training
         train_data (torch.Tensor): Training data
         val_data (torch.Tensor): Validation data
         context_window_len (int): Length of context window to be considered
@@ -170,7 +169,7 @@ def engine(
     train_data: Dataset,
     device: str,
     val_data: Dataset,
-    model: BigramLanguageModel,
+    model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     epochs: int,
     context_window_len: int, 
@@ -214,7 +213,7 @@ def engine(
     
     min_test_loss = float("inf")
     prefix = datetime.now().strftime("%d-%m-%y-%H-%M-%S")
-    model_name = prefix + "_bigram.pt"
+    model_name = prefix + f"_{config.MODEL_NAME.lower()}.pt"
     
     log_every = max(1, epochs // 100)
     sample_every = max(1, epochs // 10)
@@ -257,20 +256,20 @@ def engine(
         if min_test_loss > test_loss:
             save_model(
                 model=model, 
-                target_dir="trained_models/BigramLanguageModel", 
+                target_dir=f"trained_models/{config.MODEL_NAME.lower()}", 
                 model_name=model_name
             )
             min_test_loss = test_loss
             
     save_results(
-        target_dir="trained_models/BigramLanguageModel", 
+        target_dir=f"trained_models/{config.MODEL_NAME.lower()}", 
         model_name=model_name, 
         results=results
     )
     plot_model_curves(
         results=results, 
         save_path=(
-            Path("trained_models/BigramLanguageModel") / Path(model_name).stem / "plot.png"
+            Path(f"trained_models/{config.MODEL_NAME.lower()}") / Path(model_name).stem / "plot.png"
         )
     )
     print(f"Lowest Test Loss achieved during training: {min_test_loss: .4f}")
@@ -285,17 +284,19 @@ if __name__ == "__main__":
         stoi=stoi,
         itos=itos
     )
-    MODEL = BigramLanguageModel(
-        vocab_size=len(TRAIN_DATA.vocab), 
-        endoftext_token_id=TRAIN_DATA.stoi["<|endoftext|>"]
-    )
+    kwargs = {k: v for k, v in vars(config).items() if not k.startswith("__")}
+    kwargs["endoftext_token_id"]= TRAIN_DATA.stoi["<|endoftext|>"]
+    kwargs["vocab_size"]= len(TRAIN_DATA.vocab)
+    
+    MODEL = config.MODEL(**kwargs)
+    
     OPTIMIZER = torch.optim.AdamW(
         params=MODEL.parameters(), 
-        lr=bigram_config.LEARNING_RATE
+        lr=config.LEARNING_RATE
     )
     print(
         "Training starting with the following config: "
-        f"{bigram_config}"
+        f"{kwargs}"
         f"{TRAIN_DATA, VAL_DATA}"
         f"{MODEL, OPTIMIZER}"
     )
@@ -306,7 +307,7 @@ if __name__ == "__main__":
         val_data=VAL_DATA,
         model=MODEL,
         optimizer=OPTIMIZER,
-        epochs=bigram_config.EPOCHS,
-        context_window_len=bigram_config.CONTEXT_WINDOW_LEN,
-        batch_size=bigram_config.BATCH_SIZE,
+        epochs=config.EPOCHS,
+        context_window_len=config.CONTEXT_WINDOW_LEN,
+        batch_size=config.BATCH_SIZE,
     )

@@ -3,54 +3,27 @@ import torch.nn as nn
 from torch.nn import functional as F
 from typing import Tuple
 
-"""
-Training sketch for BigramLanguageModel:
-
-    1. Start with a batch of token indices x and targets y from the dataset. Each row in
-       x is a short context of token IDs, and the matching row in y is the same sequence 
-       shifted by one token.
-
-    2. Pass x through the embedding table. For this model, each token ID looks up one
-       row from a learned matrix of size [V×V], so the output is a tensor of logits 
-       with shape roughly [B,T,V].
-
-    3. Compare those logits to the true next tokens y using cross-entropy loss. That 
-       loss measures how wrong the model’s next-token predictions are.
-
-    4. Call backward on the loss. PyTorch computes gradients for the embedding matrix 
-       entries that were used in the forward pass.
-
-    5. Call the optimizer step. That updates the embedding weights so the next time those
-       token IDs appear, their looked-up rows produce better next-token logits.
-
-    So the learning is not happening in a hidden stack of layers. It is happening in the
-    embedding weight matrix itself, which is being optimized to become a 
-    token-to-next-token transition table.
-
-    A useful mental model is this: if the model sees token 42 often followed by token 17,
-    the row for token 42 will gradually shift to assign a higher logit to token 17 than
-    to other tokens. That is the “knowledge” the model learns.
-"""
-
-class BigramLanguageModel(nn.Module):
+class SelfAttentionLanguageModel(nn.Module):
     def __init__(
         self, 
         vocab_size: int,
-        endoftext_token_id: int | None = None
+        EMBED_SIZE: int,
+        endoftext_token_id: int | None = None,
+        **kwargs
     ):
-        """Initializes the Bigram Language model. One of the most basic language models
+        """Initializes the Self Attention Model
 
         Args:
-            vocab_size (int): Vocabulary size of the dataset
-            endoftext_token_id (int | None): Token id for "<|endoftext|>"
+            vocab_size (int): Size of dataset vocabulary
+            n_embed (int): Embedding dimension
+            endoftext_token_id (int | None, optional): Token_id for endoftext token to stop generation. Defaults to None.
         """
         super().__init__()
-        self.token_embedding_table = nn.Embedding(vocab_size, vocab_size) # (num_embeddings, embed_size)
+        self.n_embed = EMBED_SIZE
+        self.token_embedding_table = nn.Embedding(vocab_size, self.n_embed) # (num_embeddings, embed_size)
         self.endoftext_token_id = endoftext_token_id
-        # Each token directly reads off the logits for the next token from a lookup table
-        # For this model, embed_size == vocab_size
-        # Note that Embedding isn't just a lookup table. This is a learnable weight matrix that gets updated via back propagation in the training loop
-        
+        self.lm_head = nn.Linear(in_features=self.n_embed, out_features=vocab_size)
+          
     def forward(
         self, 
         idx: torch.Tensor, 
@@ -68,15 +41,17 @@ class BigramLanguageModel(nn.Module):
         """
 
         # idx and targets -> [batch_size, context_window_len]
-        logits = self.token_embedding_table(idx)
-        # logits -> [batch_size, context_window_len, embed_size]
+        tok_emb = self.token_embedding_table(idx)
+        # tok_emb -> [batch_size, context_window_len, embed_size]
+        logits = self.lm_head(tok_emb)
+        # logits -> [batch_size, context_window_len, vocab_size]
         
         if targets is None:
             loss = None
         else:
-            batch, context, embed = logits.shape
+            batch, context, vocab_size = logits.shape
             
-            logits = logits.view(batch*context, embed)  # logits -> [batch_size*context_window_len, embed_size]
+            logits = logits.view(batch*context, vocab_size)  # logits -> [batch_size*context_window_len, vocab_size]
             targets = targets.view(batch*context)   # targets -> [batch_size, context_window_len]
 
             loss = F.cross_entropy(logits, targets) # loss -> [1] === single floating point number
@@ -88,7 +63,7 @@ class BigramLanguageModel(nn.Module):
         idx: torch.Tensor, 
         max_new_tokens: int
     ) -> torch.Tensor:
-        """Generates response from the model based on an initial input. The model keeps generating until either it encounter <|endoftext|> or until
+        """Generates response from the model based on an initial input. The model keeps generating until either it encounters <|endoftext|> or until
         it hits number of tokens generated equal to max_new_tokens
 
         Args:
@@ -104,10 +79,10 @@ class BigramLanguageModel(nn.Module):
         with torch.inference_mode():
             for _ in range(max_new_tokens):
                 logits, _ = self.forward(idx, targets=None)
-                # logits -> [batch_size, context_window_len, embed_size] Here logits is 3 dimensional since target is None in the forward method
+                # logits -> [batch_size, context_window_len, vocab_size] Here logits is 3 dimensional since target is None in the forward method
                 logits = logits[:, -1, :]   # Focus only on the previous token (not the entire context window len, only the last time step)
-                # logits -> [batch_size, embed_size]
-                probs = F.softmax(logits, dim=1)    # probs -> [batch_size, embed_size]
+                # logits -> [batch_size, vocab_size]
+                probs = F.softmax(logits, dim=1)    # probs -> [batch_size, vocab_size]
                 idx_next = torch.multinomial(probs, num_samples=1)  # idx_next -> [batch_size, 1]
                 # Rather than picking the most probable, sampling from multinomial distribution
                 idx = torch.cat((idx, idx_next), dim=1)
@@ -124,33 +99,33 @@ if __name__ == "__main__":
     
     torch.manual_seed(1337)
         
-    bigram = BigramLanguageModel(vocab_size=52)
-    print("Bigram model: ", bigram)
-    print("State Dictionary of model:", bigram.state_dict())
+    sa = SelfAttentionLanguageModel(vocab_size=52, n_embed=32)
+    print("Self Attention model: ", sa)
+    print("State Dictionary of model:", sa.state_dict())
     
     idx = torch.randint(high=52, size=(4,8))
     targets = torch.randint(high=52, size=(4,8))
-    logits, loss = bigram.forward(idx=idx, targets=targets)
+    logits, loss = sa.forward(idx=idx, targets=targets)
     print(f"Sample forward pass result: \nOutput logits: {logits}, \nLoss: {loss.item(): .2f}")
     
     idx = torch.randint(high=52, size=(1,1))
-    idx = bigram.generate(idx=idx, max_new_tokens=32)
+    idx = sa.generate(idx=idx, max_new_tokens=32)
     print("Text generation sample output: ", idx)
     
     # temporary directory for demo 
-    temp_base = Path(tempfile.mkdtemp(prefix="bigram_demo_"))
-    demo_dir = temp_base / "bigram"
+    temp_base = Path(tempfile.mkdtemp(prefix="self_attention_demo_"))
+    demo_dir = temp_base / "eslf_attention"
     
     # Saving model in the temporary demo directory
     save_model(
-        model=bigram,
-        model_name="sample_bigram_model.pt",
+        model=sa,
+        model_name="sample_self_attention_model.pt",
         target_dir=str(demo_dir),
     )
 
     loaded_model = load_model(
-        model=bigram,
-        target_model_path=str(demo_dir / "sample_bigram_model" / "sample_bigram_model.pt"),
+        model=sa,
+        target_model_path=str(demo_dir / "sample_self_attention_model" / "sample_self_attention_model.pt"),
     )
 
     print("Loaded model's state dict: ", loaded_model.state_dict())
