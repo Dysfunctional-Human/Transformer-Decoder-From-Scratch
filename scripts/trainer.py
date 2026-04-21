@@ -1,8 +1,8 @@
 import torch
 import os, sys
-repo_root = os.path.abspath(os.path.join(__file__, "..", ".."))
+repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if repo_root not in sys.path:
-    sys.path.append(repo_root)
+    sys.path.insert(0, repo_root)
 from tqdm.auto import tqdm
 from data.data_preparation import Dataset, build_shared_tokenizer, save_tokenizer_artifacts, load_tokenizer_artifacts
 from utils.utils import get_batch, save_model, plot_model_curves, save_results

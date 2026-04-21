@@ -3,11 +3,68 @@ import torch.nn as nn
 from torch.nn import functional as F
 from typing import Tuple
 
+class Head(nn.Module):
+    def __init__(
+        self, 
+        context_window_len: int, 
+        n_embed: int, 
+        head_size: int
+    ):
+        """_summary_
+
+        Args:
+            context_window_len (int): _description_
+            n_embed (int): _description_
+            head_size (int): _description_
+        """
+        super().__init__()
+        self.key = nn.Linear(in_features=n_embed, out_features=head_size, bias=False)
+        self.query = nn.Linear(in_features=n_embed, out_features=head_size, bias=False)
+        self.value = nn.Linear(in_features=n_embed, out_features=head_size, bias=False)
+        self.register_buffer('tril', torch.tril(torch.ones(context_window_len, context_window_len)))
+        self.n_embed = n_embed
+        self.context_window_len = context_window_len
+    
+    def forward(
+        self, 
+        x: torch.Tensor
+    ):
+        """_summary_
+
+        Args:
+            x (torch.Tensor): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        B,T,C = x.shape
+        # x -> [batch_size, context_window_len, n_embed]
+        q = self.query(x)  
+        k = self.key(x)
+        # q, k -> [batch_size, context_window_len, head_size]
+        wei = q @ k.transpose(-2, -1) # transposing k to [batch_size, n_embed, context_window_len] for dot product
+        wei = wei * self.n_embed**-0.5 # For numerical stability
+        # wei -> [batch_size, context_window_len, context_window_len] => Attention scores of each word against each word in the context window
+        # Basically tells us how much weightage should the work at wei[batch][i][j] have in deciding the new embeddings of the word at ith position in the context window
+        wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
+        # Prevents the model from cheating by looking at words into the future. Assigns negative infinity weights to the wei[batch][i][j] tokens where j > i.
+        # This helps the model by not letting the the words in the future deciding the embedding of the current word, since task is next word prediction - the model can "cheat" by assigning highest weightage to the token just after the current one and thus being able to perfectly predict the next token but stil not actually learn anything valuable.
+        wei = F.softmax(wei, dim=-1) # wei -> [batch_size, context_window_len, context_window_len]
+        # Making all the weights add upto 1
+        
+        v = self.value(x)   # v -> [batch_size, context_window_len, n_embed]
+        out = wei @ v   # out -> [batch_size, context_window_len, n_embed]
+        # new updated embeddings from self attention
+        return out
+        
+
 class SelfAttentionLanguageModel(nn.Module):
     def __init__(
         self, 
         vocab_size: int,
         EMBED_SIZE: int,
+        HEAD_SIZE: int,
+        CONTEXT_WINDOW_LEN: int,
         endoftext_token_id: int | None = None,
         **kwargs
     ):
@@ -15,14 +72,20 @@ class SelfAttentionLanguageModel(nn.Module):
 
         Args:
             vocab_size (int): Size of dataset vocabulary
-            n_embed (int): Embedding dimension
+            EMBED_SIZE (int): Embedding dimension
             endoftext_token_id (int | None, optional): Token_id for endoftext token to stop generation. Defaults to None.
         """
         super().__init__()
         self.n_embed = EMBED_SIZE
+        self.head_size = HEAD_SIZE
+        self.context_window_len = CONTEXT_WINDOW_LEN
+        
         self.token_embedding_table = nn.Embedding(vocab_size, self.n_embed) # (num_embeddings, embed_size)
         self.endoftext_token_id = endoftext_token_id
+        
         self.lm_head = nn.Linear(in_features=self.n_embed, out_features=vocab_size)
+        
+        self.sa_head = Head(context_window_len=self.context_window_len, n_embed=self.n_embed, head_size=self.head_size)
           
     def forward(
         self, 
@@ -43,7 +106,9 @@ class SelfAttentionLanguageModel(nn.Module):
         # idx and targets -> [batch_size, context_window_len]
         tok_emb = self.token_embedding_table(idx)
         # tok_emb -> [batch_size, context_window_len, embed_size]
-        logits = self.lm_head(tok_emb)
+        x = self.sa_head(tok_emb)
+        # x -> [batch_size, context_window_len, embed_size]
+        logits = self.lm_head(x)
         # logits -> [batch_size, context_window_len, vocab_size]
         
         if targets is None:
@@ -78,7 +143,8 @@ class SelfAttentionLanguageModel(nn.Module):
         assert idx.shape[0] == 1, "generate method only supports batch_size=1"
         with torch.inference_mode():
             for _ in range(max_new_tokens):
-                logits, _ = self.forward(idx, targets=None)
+                idx_cropped = idx[:, -self.context_window_len:]
+                logits, _ = self.forward(idx_cropped, targets=None)
                 # logits -> [batch_size, context_window_len, vocab_size] Here logits is 3 dimensional since target is None in the forward method
                 logits = logits[:, -1, :]   # Focus only on the previous token (not the entire context window len, only the last time step)
                 # logits -> [batch_size, vocab_size]
@@ -99,7 +165,7 @@ if __name__ == "__main__":
     
     torch.manual_seed(1337)
         
-    sa = SelfAttentionLanguageModel(vocab_size=52, n_embed=32)
+    sa = SelfAttentionLanguageModel(vocab_size=52, EMBED_SIZE=32)
     print("Self Attention model: ", sa)
     print("State Dictionary of model:", sa.state_dict())
     
@@ -114,7 +180,7 @@ if __name__ == "__main__":
     
     # temporary directory for demo 
     temp_base = Path(tempfile.mkdtemp(prefix="self_attention_demo_"))
-    demo_dir = temp_base / "eslf_attention"
+    demo_dir = temp_base / "self_attention"
     
     # Saving model in the temporary demo directory
     save_model(
