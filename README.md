@@ -25,7 +25,7 @@ Switch save_results to JSON - done
 Fix the CPU-safe state_dict saving  - done
 
 Add positional encoding
-Add self attention
+Add self attention - done
 Add multi-head attention
 Add feed forward networks
 Add Layer/Batch Norm

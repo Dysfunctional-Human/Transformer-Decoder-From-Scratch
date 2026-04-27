@@ -42,18 +42,18 @@ class Head(nn.Module):
         q = self.query(x)  
         k = self.key(x)
         # q, k -> [batch_size, context_window_len, head_size]
-        wei = q @ k.transpose(-2, -1) # transposing k to [batch_size, n_embed, context_window_len] for dot product
+        wei = q @ k.transpose(-2, -1) # transposing k to [batch_size, head_size, context_window_len] for dot product
         wei = wei * (q.size(-1))**-0.5 # For numerical stability
         # wei -> [batch_size, context_window_len, context_window_len] => Attention scores of each word against each word in the context window
-        # Basically tells us how much weightage should the work at wei[batch][i][j] have in deciding the new embeddings of the word at ith position in the context window
+        # Basically tells us how much weightage should the word at wei[batch][i][j] have in deciding the new embeddings of the word at ith position in the context window
         wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
         # Prevents the model from cheating by looking at words into the future. Assigns negative infinity weights to the wei[batch][i][j] tokens where j > i.
-        # This helps the model by not letting the the words in the future deciding the embedding of the current word, since task is next word prediction - the model can "cheat" by assigning highest weightage to the token just after the current one and thus being able to perfectly predict the next token but stil not actually learn anything valuable.
+        # This helps the model by not letting the the words in the future deciding the embedding of the current word, since task is next word prediction - the model can "cheat" by assigning highest weightage to the token just after the current one and thus being able to perfectly predict the next token but still not actually learn anything valuable.
         wei = F.softmax(wei, dim=-1) # wei -> [batch_size, context_window_len, context_window_len]
         # Making all the weights add upto 1
         
-        v = self.value(x)   # v -> [batch_size, context_window_len, n_embed]
-        out = wei @ v   # out -> [batch_size, context_window_len, n_embed]
+        v = self.value(x)   # v -> [batch_size, context_window_len, head_size]
+        out = wei @ v   # out -> [batch_size, context_window_len, head_size]
         # new updated embeddings from self attention
         return out
         
