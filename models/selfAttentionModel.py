@@ -46,6 +46,7 @@ class Head(nn.Module):
         wei = wei * (q.size(-1))**-0.5 # For numerical stability
         # wei -> [batch_size, context_window_len, context_window_len] => Attention scores of each word against each word in the context window
         # Basically tells us how much weightage should the word at wei[batch][i][j] have in deciding the new embeddings of the word at ith position in the context window
+        assert T <= self.context_window_len
         wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
         # Prevents the model from cheating by looking at words into the future. Assigns negative infinity weights to the wei[batch][i][j] tokens where j > i.
         # This helps the model by not letting the the words in the future deciding the embedding of the current word, since task is next word prediction - the model can "cheat" by assigning highest weightage to the token just after the current one and thus being able to perfectly predict the next token but still not actually learn anything valuable.
@@ -107,7 +108,7 @@ class SelfAttentionLanguageModel(nn.Module):
         tok_emb = self.token_embedding_table(idx)
         # tok_emb -> [batch_size, context_window_len, embed_size]
         x = self.sa_head(tok_emb)
-        # x -> [batch_size, context_window_len, embed_size]
+        # x -> [batch_size, context_window_len, head_size]
         logits = self.lm_head(x)
         # logits -> [batch_size, context_window_len, vocab_size]
         
@@ -116,8 +117,8 @@ class SelfAttentionLanguageModel(nn.Module):
         else:
             batch, context, vocab_size = logits.shape
             
-            logits = logits.view(batch*context, vocab_size)  # logits -> [batch_size*context_window_len, vocab_size]
-            targets = targets.view(batch*context)   # targets -> [batch_size, context_window_len]
+            logits = logits.reshape(batch*context, vocab_size)  # logits -> [batch_size*context_window_len, vocab_size]
+            targets = targets.reshape(batch*context)   # targets -> [batch_size, context_window_len]
 
             loss = F.cross_entropy(logits, targets) # loss -> [1] === single floating point number
         
