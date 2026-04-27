@@ -36,7 +36,8 @@ class BigramLanguageModel(nn.Module):
     def __init__(
         self, 
         vocab_size: int,
-        endoftext_token_id: int | None = None
+        endoftext_token_id: int | None = None,
+        **kwargs
     ):
         """Initializes the Bigram Language model. One of the most basic language models
 
@@ -141,7 +142,7 @@ if __name__ == "__main__":
     temp_base = Path(tempfile.mkdtemp(prefix="bigram_demo_"))
     demo_dir = temp_base / "bigram"
     
-    # Saving model and results in the temporary demo directory
+    # Saving model in the temporary demo directory
     save_model(
         model=bigram,
         model_name="sample_bigram_model.pt",

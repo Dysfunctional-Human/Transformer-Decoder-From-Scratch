@@ -133,7 +133,7 @@ def save_results(
     results_save_path = target_dir_path / "results.json"
     with open(results_save_path, "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=True)
-    print("Results saved successfully at: ", target_dir_path)
+    print("Results saved successfully at: ", results_save_path)
     
 def load_results(
     results_path: str
