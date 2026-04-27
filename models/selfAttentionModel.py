@@ -10,12 +10,12 @@ class Head(nn.Module):
         n_embed: int, 
         head_size: int
     ):
-        """_summary_
+        """A single head of self attention
 
         Args:
-            context_window_len (int): _description_
-            n_embed (int): _description_
-            head_size (int): _description_
+            context_window_len (int): Length of model's context window
+            n_embed (int): Embedding dimension
+            head_size (int): Attention embedding dimensions
         """
         super().__init__()
         self.key = nn.Linear(in_features=n_embed, out_features=head_size, bias=False)
@@ -29,13 +29,13 @@ class Head(nn.Module):
         self, 
         x: torch.Tensor
     ):
-        """_summary_
+        """Single forward pass for the attention head
 
         Args:
-            x (torch.Tensor): _description_
+            x (torch.Tensor): Tensor containing input data
 
         Returns:
-            _type_: _description_
+            out (torch.Tensor): New attention based updated embeddings
         """
         B,T,C = x.shape
         # x -> [batch_size, context_window_len, n_embed]
@@ -43,7 +43,7 @@ class Head(nn.Module):
         k = self.key(x)
         # q, k -> [batch_size, context_window_len, head_size]
         wei = q @ k.transpose(-2, -1) # transposing k to [batch_size, n_embed, context_window_len] for dot product
-        wei = wei * self.n_embed**-0.5 # For numerical stability
+        wei = wei * (q.size(-1))**-0.5 # For numerical stability
         # wei -> [batch_size, context_window_len, context_window_len] => Attention scores of each word against each word in the context window
         # Basically tells us how much weightage should the work at wei[batch][i][j] have in deciding the new embeddings of the word at ith position in the context window
         wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
@@ -83,7 +83,7 @@ class SelfAttentionLanguageModel(nn.Module):
         self.token_embedding_table = nn.Embedding(vocab_size, self.n_embed) # (num_embeddings, embed_size)
         self.endoftext_token_id = endoftext_token_id
         
-        self.lm_head = nn.Linear(in_features=self.n_embed, out_features=vocab_size)
+        self.lm_head = nn.Linear(in_features=self.head_size, out_features=vocab_size)
         
         self.sa_head = Head(context_window_len=self.context_window_len, n_embed=self.n_embed, head_size=self.head_size)
           
@@ -165,7 +165,7 @@ if __name__ == "__main__":
     
     torch.manual_seed(1337)
         
-    sa = SelfAttentionLanguageModel(vocab_size=52, EMBED_SIZE=32)
+    sa = SelfAttentionLanguageModel(vocab_size=52, EMBED_SIZE=32, HEAD_SIZE=42, CONTEXT_WINDOW_LEN=8, endoftext_token_id=0)
     print("Self Attention model: ", sa)
     print("State Dictionary of model:", sa.state_dict())
     
