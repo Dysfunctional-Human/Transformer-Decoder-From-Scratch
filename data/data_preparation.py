@@ -120,7 +120,7 @@ class Dataset():
 
         Args:
             data_path (str): Data storage location
-            device (str, optional): Device to load the data on ('cpu' or 'cuda'). Defaults to "cuda".
+            device (str, optional): Device to load the data on ('cpu' or 'cuda' or 'mps'). Defaults to "cuda".
             debug (bool, optional): Whether to print extra debug statements. Defaults to False.
             vocab (Optional[List[str]], optional): Shared vocabulary to use (if any). Defaults to None.
             stoi (Optional[Dict[str, int]], optional): Shared stoi dictionary to use (if any). Defaults to None.
