@@ -179,7 +179,7 @@ def engine(
 
     Args:
         train_data (Dataset): Dataset for training
-        device (str): Device to conduct training on ('cpu' or 'cuda')
+        device (str): Device to conduct training on ('cpu', 'cuda' or 'mps')
         val_data (Dataset): Dataset for testing/validation
         model (nn.Module): Model to be trained
         optimizer (torch.optim.Optimizer): Optimizer to be used to update model params
