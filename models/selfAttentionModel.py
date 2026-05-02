@@ -66,6 +66,7 @@ class SelfAttentionLanguageModel(nn.Module):
         EMBED_SIZE: int,
         HEAD_SIZE: int,
         CONTEXT_WINDOW_LEN: int,
+        DEVICE: str = "cpu",
         endoftext_token_id: int | None = None,
         **kwargs
     ):
@@ -80,8 +81,10 @@ class SelfAttentionLanguageModel(nn.Module):
         self.n_embed = EMBED_SIZE
         self.head_size = HEAD_SIZE
         self.context_window_len = CONTEXT_WINDOW_LEN
+        self.device = DEVICE
         
         self.token_embedding_table = nn.Embedding(vocab_size, self.n_embed) # (num_embeddings, embed_size)
+        self.position_embedding_table = nn.Embedding(self.context_window_len, self.n_embed) # (number of tokens given to the model, embed_size)
         self.endoftext_token_id = endoftext_token_id
         
         self.lm_head = nn.Linear(in_features=self.head_size, out_features=vocab_size)
@@ -104,10 +107,15 @@ class SelfAttentionLanguageModel(nn.Module):
             loss (torch.Tensor | None): Loss function value for the given input and targets
         """
 
+        B, T = idx.shape
         # idx and targets -> [batch_size, context_window_len]
         tok_emb = self.token_embedding_table(idx)
         # tok_emb -> [batch_size, context_window_len, embed_size]
-        x = self.sa_head(tok_emb)
+        pos_emb = self.position_embedding_table(torch.arange(T, device=idx.device))
+        # pos_emb -> [context_window_len, embed_size]
+        x = tok_emb + pos_emb
+        # x -> [batch_size, context_window_len, embed_size]
+        x = self.sa_head(x)
         # x -> [batch_size, context_window_len, head_size]
         logits = self.lm_head(x)
         # logits -> [batch_size, context_window_len, vocab_size]

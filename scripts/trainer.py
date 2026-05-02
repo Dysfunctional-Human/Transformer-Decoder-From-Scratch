@@ -179,9 +179,9 @@ def engine(
 
     Args:
         train_data (Dataset): Dataset for training
-        device (str): Device to conduct training on ('cpu' or 'cuda')
+        device (str): Device to conduct training on ('cpu', 'cuda' or 'mps')
         val_data (Dataset): Dataset for testing/validation
-        model (BigramLanguageModel): Model to be trained
+        model (nn.Module): Model to be trained
         optimizer (torch.optim.Optimizer): Optimizer to be used to update model params
         epochs (int): Number of training and testing iterations
         context_window_len (int): Length of context window to be considered by the model
