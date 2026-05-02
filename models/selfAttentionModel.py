@@ -66,7 +66,7 @@ class SelfAttentionLanguageModel(nn.Module):
         EMBED_SIZE: int,
         HEAD_SIZE: int,
         CONTEXT_WINDOW_LEN: int,
-        DEVICE: str,
+        DEVICE: str = "cpu",
         endoftext_token_id: int | None = None,
         **kwargs
     ):
@@ -111,7 +111,7 @@ class SelfAttentionLanguageModel(nn.Module):
         # idx and targets -> [batch_size, context_window_len]
         tok_emb = self.token_embedding_table(idx)
         # tok_emb -> [batch_size, context_window_len, embed_size]
-        pos_emb = self.position_embedding_table(torch.arange(T, device=self.device))
+        pos_emb = self.position_embedding_table(torch.arange(T, device=idx.device))
         # pos_emb -> [context_window_len, embed_size]
         x = tok_emb + pos_emb
         # x -> [batch_size, context_window_len, embed_size]
