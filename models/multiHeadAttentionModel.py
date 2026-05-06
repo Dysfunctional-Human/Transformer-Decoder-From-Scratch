@@ -11,11 +11,13 @@ class MultiHeadAttention(nn.Module):
         context_window_len: int,
         n_embed: int
     ):
-        """_summary_
+        """A block of Multi Head Attention
 
         Args:
-            num_heads (int): _description_
-            head_siz (int): _description_
+            num_heads (int): Number of self attention heads
+            head_size (int): Embedding dimension for each head
+            context_window_len (int): Length of context window
+            n_embed (int): Embedding dimension of input data
         """
         super().__init__()
         self.head_size = head_size
@@ -24,22 +26,28 @@ class MultiHeadAttention(nn.Module):
         self.context_window_len = context_window_len
         
         
-        self.heads = nn.ModuleList([Head(
+        self.heads = nn.ModuleList([Head(   # A list of self attention heads
             context_window_len=self.context_window_len,
             n_embed=self.n_embed,
             head_size=self.head_size
             ) for _ in range(num_heads) ])
 
-    def forward(self, x):
-        """_summary_
+    def forward(
+        self, 
+        x: torch.Tensor
+    ):
+        """Single forward pass for the multi head attention block
 
         Args:
-            x (_type_): _description_
+            x (torch.Tensr): Tensor containing input data
 
         Returns:
-            _type_: _description_
+            torch.Tensor: New attention based updated embeddings made by concatenating output embeddings from each attention head
         """
-        return torch.cat([att_head(x) for att_head in self.heads], dim=-1)
+        # x -> [batch_size, context_window_len, n_embed]
+        return torch.cat([att_head(x) for att_head in self.heads], dim=-1)  # att_head(x) -> [batch_size, context_window_len, n_embed//num_heads]
+        # concatenates output from each attention head -> (n_embed//num_heads)*num_heads => [batch_size, context_window_len, n_embed]
+    
 
 class Head(nn.Module):
     def __init__(
@@ -84,7 +92,10 @@ class Head(nn.Module):
         wei = wei * (q.size(-1))**-0.5 # For numerical stability
         # wei -> [batch_size, context_window_len, context_window_len] => Attention scores of each word against each word in the context window
         # Basically tells us how much weightage should the word at wei[batch][i][j] have in deciding the new embeddings of the word at ith position in the context window
-        assert T <= self.context_window_len
+        if T > self.context_window_len:
+            raise ValueError(
+                f"T ({T}) exceeds context_window_len ({self.context_window_len})"
+            )
         wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
         # Prevents the model from cheating by looking at words into the future. Assigns negative infinity weights to the wei[batch][i][j] tokens where j > i.
         # This helps the model by not letting the the words in the future deciding the embedding of the current word, since task is next word prediction - the model can "cheat" by assigning highest weightage to the token just after the current one and thus being able to perfectly predict the next token but still not actually learn anything valuable.
@@ -138,7 +149,15 @@ class MultiHeadAttentionLanguageModel(nn.Module):
         self.apply(self._init_weights)
         
     
-    def _init_weights(self, module: nn.Module):
+    def _init_weights(
+        self, 
+        module: nn.Module
+    ):
+        """Initialize weights for model layers
+
+        Args:
+            module (nn.Module): Language Model
+        """
         if isinstance(module, nn.Linear) or isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
             if isinstance(module, nn.Linear) and module.bias is not None:
@@ -178,10 +197,10 @@ class MultiHeadAttentionLanguageModel(nn.Module):
         else:
             batch, context, vocab_size = logits.shape
             
-            logits = logits.reshape(batch*context, vocab_size)  # logits -> [batch_size*context_window_len, vocab_size]
+            logits_2d = logits.reshape(batch*context, vocab_size)  # logits -> [batch_size*context_window_len, vocab_size]
             targets = targets.reshape(batch*context)   # targets -> [batch_size, context_window_len]
 
-            loss = F.cross_entropy(logits, targets) # loss -> [1] === single floating point number
+            loss = F.cross_entropy(logits_2d, targets) # loss -> [1] === single floating point number
         
         return logits, loss
 
@@ -227,17 +246,17 @@ if __name__ == "__main__":
     
     torch.manual_seed(1337)
         
-    sa = MultiHeadAttentionLanguageModel(vocab_size=52, EMBED_SIZE=32, CONTEXT_WINDOW_LEN=8, endoftext_token_id=0)
-    print("Self Attention model: ", sa)
-    print("State Dictionary of model:", sa.state_dict())
+    mha = MultiHeadAttentionLanguageModel(vocab_size=52, EMBED_SIZE=32, CONTEXT_WINDOW_LEN=8, endoftext_token_id=0, NUM_HEADS=3)
+    print("Multi Head Attention model: ", mha)
+    print("State Dictionary of model:", mha.state_dict())
     
     idx = torch.randint(high=52, size=(4,8))
     targets = torch.randint(high=52, size=(4,8))
-    logits, loss = sa.forward(idx=idx, targets=targets)
+    logits, loss = mha.forward(idx=idx, targets=targets)
     print(f"Sample forward pass result: \nOutput logits: {logits}, \nLoss: {loss.item(): .2f}")
     
     idx = torch.randint(high=52, size=(1,1))
-    idx = sa.generate(idx=idx, max_new_tokens=32)
+    idx = mha.generate(idx=idx, max_new_tokens=32)
     print("Text generation sample output: ", idx)
     
     # temporary directory for demo 
@@ -246,13 +265,13 @@ if __name__ == "__main__":
     
     # Saving model in the temporary demo directory
     save_model(
-        model=sa,
+        model=mha,
         model_name="sample_self_attention_model.pt",
         target_dir=str(demo_dir),
     )
 
     loaded_model = load_model(
-        model=sa,
+        model=mha,
         target_model_path=str(demo_dir / "sample_self_attention_model" / "sample_self_attention_model.pt"),
     )
 
