@@ -9,6 +9,12 @@ class FeedForward(nn.Module):
         in_dims: int, 
         out_dims: int
     ):
+        """_summary_
+
+        Args:
+            in_dims (int): _description_
+            out_dims (int): _description_
+        """
         super().__init__()
         self.in_dims = in_dims
         self.out_dims = out_dims
@@ -22,6 +28,14 @@ class FeedForward(nn.Module):
         self, 
         x: torch.Tensor
     ):
+        """_summary_
+
+        Args:
+            x (torch.Tensor): _description_
+
+        Returns:
+            _type_: _description_
+        """
         return self.ffn(x)
         
 
@@ -47,12 +61,19 @@ class MultiHeadAttention(nn.Module):
         self.n_embed = n_embed
         self.context_window_len = context_window_len
         
-        
-        self.heads = nn.ModuleList([Head(   # A list of self attention heads
-            context_window_len=self.context_window_len,
-            n_embed=self.n_embed,
-            head_size=self.head_size
-            ) for _ in range(num_heads) ])
+        # Validate that concatenated head dimensions match the embedding size
+        if num_heads * head_size != n_embed:
+            raise ValueError(
+                f"num_heads ({num_heads}) * head_size ({head_size}) must equal n_embed ({n_embed})"
+            )
+            
+        self.heads = nn.ModuleList([    # A list of self attention heads
+            Head(
+                context_window_len=self.context_window_len,
+                n_embed=self.n_embed,
+                head_size=self.head_size
+            ) for _ in range(num_heads)
+        ])
 
     def forward(
         self, 
@@ -105,7 +126,7 @@ class Head(nn.Module):
         Returns:
             out (torch.Tensor): New attention based updated embeddings
         """
-        B,T,C = x.shape
+        _, T, _ = x.shape
         # x -> [batch_size, context_window_len, n_embed]
         q = self.query(x)  
         k = self.key(x)
@@ -142,7 +163,7 @@ class MultiHeadAttentionLanguageModel(nn.Module):
         endoftext_token_id: int | None = None,
         **kwargs
     ):
-        """Initializes the Self Attention Model
+        """Initializes the Multi Head Attention Model
 
         Args:
             vocab_size (int): Size of dataset vocabulary
@@ -296,19 +317,19 @@ if __name__ == "__main__":
     print("Text generation sample output: ", idx)
     
     # temporary directory for demo 
-    temp_base = Path(tempfile.mkdtemp(prefix="self_attention_demo_"))
-    demo_dir = temp_base / "self_attention"
+    temp_base = Path(tempfile.mkdtemp(prefix="multi_head_attention_demo_"))
+    demo_dir = temp_base / "multi_head_attention"
     
     # Saving model in the temporary demo directory
     save_model(
         model=mha,
-        model_name="sample_self_attention_model.pt",
+        model_name="sample_multi_head_attention_model.pt",
         target_dir=str(demo_dir),
     )
 
     loaded_model = load_model(
         model=mha,
-        target_model_path=str(demo_dir / "sample_self_attention_model" / "sample_self_attention_model.pt"),
+        target_model_path=str(demo_dir / "sample_multi_head_attention_model" / "sample_multi_head_attention_model.pt"),
     )
 
     print("Loaded model's state dict: ", loaded_model.state_dict())
@@ -316,4 +337,3 @@ if __name__ == "__main__":
     # Clean up only the temporary demo directory we created
     if temp_base.exists():
         shutil.rmtree(temp_base)
-
