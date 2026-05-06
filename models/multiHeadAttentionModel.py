@@ -3,6 +3,44 @@ import torch.nn as nn
 from torch.nn import functional as F
 from typing import Tuple
 
+class MultiHeadAttention(nn.Module):
+    def __init__(
+        self,
+        num_heads: int,
+        head_size: int,
+        context_window_len: int,
+        n_embed: int
+    ):
+        """_summary_
+
+        Args:
+            num_heads (int): _description_
+            head_siz (int): _description_
+        """
+        super().__init__()
+        self.head_size = head_size
+        self.num_heads = num_heads
+        self.n_embed = n_embed
+        self.context_window_len = context_window_len
+        
+        
+        self.heads = nn.ModuleList([Head(
+            context_window_len=self.context_window_len,
+            n_embed=self.n_embed,
+            head_size=self.head_size
+            ) for _ in range(num_heads) ])
+
+    def forward(self, x):
+        """_summary_
+
+        Args:
+            x (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        return torch.cat([att_head(x) for att_head in self.heads], dim=-1)
+
 class Head(nn.Module):
     def __init__(
         self, 
@@ -59,13 +97,13 @@ class Head(nn.Module):
         return out
         
 
-class SelfAttentionLanguageModel(nn.Module):
+class MultiHeadAttentionLanguageModel(nn.Module):
     def __init__(
         self, 
         vocab_size: int,
         EMBED_SIZE: int,
-        HEAD_SIZE: int,
         CONTEXT_WINDOW_LEN: int,
+        NUM_HEADS: int,
         DEVICE: str = "cpu",
         endoftext_token_id: int | None = None,
         **kwargs
@@ -79,17 +117,22 @@ class SelfAttentionLanguageModel(nn.Module):
         """
         super().__init__()
         self.n_embed = EMBED_SIZE
-        self.head_size = HEAD_SIZE
         self.context_window_len = CONTEXT_WINDOW_LEN
         self.device = DEVICE
+        self.num_heads = NUM_HEADS
         
         self.token_embedding_table = nn.Embedding(vocab_size, self.n_embed) # (num_embeddings, embed_size)
         self.position_embedding_table = nn.Embedding(self.context_window_len, self.n_embed) # (number of tokens given to the model, embed_size)
         self.endoftext_token_id = endoftext_token_id
         
-        self.lm_head = nn.Linear(in_features=self.head_size, out_features=vocab_size)
+        self.lm_head = nn.Linear(in_features=self.n_embed, out_features=vocab_size)
         
-        self.sa_head = Head(context_window_len=self.context_window_len, n_embed=self.n_embed, head_size=self.head_size)
+        self.attention_heads = MultiHeadAttention(
+            num_heads=self.num_heads, 
+            head_size=self.n_embed//self.num_heads, 
+            context_window_len=self.context_window_len, 
+            n_embed=self.n_embed
+        )
         
         # Better weight initialization for faster convergence
         self.apply(self._init_weights)
@@ -125,7 +168,7 @@ class SelfAttentionLanguageModel(nn.Module):
         # pos_emb -> [context_window_len, embed_size]
         x = tok_emb + pos_emb
         # x -> [batch_size, context_window_len, embed_size]
-        x = self.sa_head(x)
+        x = self.attention_heads(x)
         # x -> [batch_size, context_window_len, head_size]
         logits = self.lm_head(x)
         # logits -> [batch_size, context_window_len, vocab_size]
@@ -184,7 +227,7 @@ if __name__ == "__main__":
     
     torch.manual_seed(1337)
         
-    sa = SelfAttentionLanguageModel(vocab_size=52, EMBED_SIZE=32, HEAD_SIZE=42, CONTEXT_WINDOW_LEN=8, endoftext_token_id=0)
+    sa = MultiHeadAttentionLanguageModel(vocab_size=52, EMBED_SIZE=32, CONTEXT_WINDOW_LEN=8, endoftext_token_id=0)
     print("Self Attention model: ", sa)
     print("State Dictionary of model:", sa.state_dict())
     

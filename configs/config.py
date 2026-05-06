@@ -1,14 +1,14 @@
 import torch
 from models import bigramModel, selfAttentionModel, multiHeadAttentionModel
 
-MODEL_NAME = "Self_Attention"
+MODEL_NAME = "Multi_Head_attention"
 MODEL_NAME = MODEL_NAME.lower()
 if MODEL_NAME == "bigram":
     MODEL = bigramModel.BigramLanguageModel
 elif MODEL_NAME == "self_attention":
     MODEL = selfAttentionModel.SelfAttentionLanguageModel
 elif MODEL_NAME == "multi_head_attention":
-    MODEL = 
+    MODEL = multiHeadAttentionModel.MultiHeadAttentionLanguageModel
 else:
     raise ValueError(
         f"Unsupported MODEL_NAME '{MODEL_NAME}'"
@@ -28,6 +28,7 @@ CONTEXT_WINDOW_LEN = 8
 BATCH_SIZE = 4
 EMBED_SIZE = 32
 HEAD_SIZE = 32
+NUM_HEADS = 4
 
 if torch.cuda.is_available():
     DEVICE = "cuda"
@@ -36,5 +37,5 @@ elif torch.mps.is_available():
 else:
     DEVICE = "cpu"
     
-if MODEL_NAME == "self_attention":
+if MODEL_NAME != "bigram":
     LEARNING_RATE = 1e-3
