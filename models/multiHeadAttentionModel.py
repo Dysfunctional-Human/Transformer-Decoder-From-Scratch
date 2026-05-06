@@ -3,6 +3,28 @@ import torch.nn as nn
 from torch.nn import functional as F
 from typing import Tuple
 
+class FeedForward(nn.Module):
+    def __init__(
+        self, 
+        in_dims: int, 
+        out_dims: int
+    ):
+        super().__init__()
+        self.in_dims = in_dims
+        self.out_dims = out_dims
+        
+        self.ffn = nn.Sequential(
+            nn.Linear(in_features=self.in_dims, out_features=self.out_dims),
+            nn.ReLU()
+        )
+        
+    def forward(
+        self, 
+        x: torch.Tensor
+    ):
+        return self.ffn(x)
+        
+
 class MultiHeadAttention(nn.Module):
     def __init__(
         self,
@@ -39,7 +61,7 @@ class MultiHeadAttention(nn.Module):
         """Single forward pass for the multi head attention block
 
         Args:
-            x (torch.Tensr): Tensor containing input data
+            x (torch.Tensor): Tensor containing input data
 
         Returns:
             torch.Tensor: New attention based updated embeddings made by concatenating output embeddings from each attention head
@@ -116,6 +138,7 @@ class MultiHeadAttentionLanguageModel(nn.Module):
         CONTEXT_WINDOW_LEN: int,
         NUM_HEADS: int,
         DEVICE: str = "cpu",
+        # Optional token ID for the end-of-text token; used to stop generation when encountered
         endoftext_token_id: int | None = None,
         **kwargs
     ):
@@ -136,14 +159,23 @@ class MultiHeadAttentionLanguageModel(nn.Module):
         self.position_embedding_table = nn.Embedding(self.context_window_len, self.n_embed) # (number of tokens given to the model, embed_size)
         self.endoftext_token_id = endoftext_token_id
         
-        self.lm_head = nn.Linear(in_features=self.n_embed, out_features=vocab_size)
-        
+        # Ensure embedding dimension is divisible by number of heads
+        if self.n_embed % self.num_heads != 0:
+            raise ValueError(f"Embedding dimension n_embed ({self.n_embed}) must be divisible by num_heads ({self.num_heads})")
+        head_dim = self.n_embed // self.num_heads
         self.attention_heads = MultiHeadAttention(
-            num_heads=self.num_heads, 
-            head_size=self.n_embed//self.num_heads, 
-            context_window_len=self.context_window_len, 
+            num_heads=self.num_heads,
+            head_size=head_dim,
+            context_window_len=self.context_window_len,
             n_embed=self.n_embed
         )
+        
+        self.projection_layer = FeedForward(
+            in_dims=self.num_heads*(self.n_embed//self.num_heads),
+            out_dims=self.n_embed
+        )
+        
+        self.lm_head = nn.Linear(in_features=self.n_embed, out_features=vocab_size)
         
         # Better weight initialization for faster convergence
         self.apply(self._init_weights)
@@ -181,6 +213,7 @@ class MultiHeadAttentionLanguageModel(nn.Module):
 
         B, T = idx.shape
         # idx and targets -> [batch_size, context_window_len]
+        
         tok_emb = self.token_embedding_table(idx)
         # tok_emb -> [batch_size, context_window_len, embed_size]
         pos_emb = self.position_embedding_table(torch.arange(T, device=idx.device))
@@ -188,7 +221,9 @@ class MultiHeadAttentionLanguageModel(nn.Module):
         x = tok_emb + pos_emb
         # x -> [batch_size, context_window_len, embed_size]
         x = self.attention_heads(x)
-        # x -> [batch_size, context_window_len, head_size]
+        # x -> [batch_size, context_window_len, num_heads*(n_embed//num_heads)]
+        x = self.projection_layer(x)
+        # x -> [batch_size, context_window_len, n_embed]
         logits = self.lm_head(x)
         # logits -> [batch_size, context_window_len, vocab_size]
         
@@ -221,7 +256,8 @@ class MultiHeadAttentionLanguageModel(nn.Module):
         """
         # idx -> [batch_size, context_window_len]
         # Ensure batch size is 1 for generation
-        assert idx.shape[0] == 1, "generate method only supports batch_size=1"
+        if idx.shape[0] != 1:
+            raise ValueError("generate method only supports batch_size=1")
         with torch.inference_mode():
             for _ in range(max_new_tokens):
                 idx_cropped = idx[:, -self.context_window_len:]
@@ -246,7 +282,7 @@ if __name__ == "__main__":
     
     torch.manual_seed(1337)
         
-    mha = MultiHeadAttentionLanguageModel(vocab_size=52, EMBED_SIZE=32, CONTEXT_WINDOW_LEN=8, endoftext_token_id=0, NUM_HEADS=3)
+    mha = MultiHeadAttentionLanguageModel(vocab_size=52, EMBED_SIZE=32, CONTEXT_WINDOW_LEN=8, endoftext_token_id=0, NUM_HEADS=4)
     print("Multi Head Attention model: ", mha)
     print("State Dictionary of model:", mha.state_dict())
     
