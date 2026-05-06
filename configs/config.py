@@ -1,5 +1,5 @@
 import torch
-from models import bigramModel, selfAttentionModel
+from models import bigramModel, selfAttentionModel, multiHeadAttentionModel
 
 MODEL_NAME = "Self_Attention"
 MODEL_NAME = MODEL_NAME.lower()
@@ -7,6 +7,8 @@ if MODEL_NAME == "bigram":
     MODEL = bigramModel.BigramLanguageModel
 elif MODEL_NAME == "self_attention":
     MODEL = selfAttentionModel.SelfAttentionLanguageModel
+elif MODEL_NAME == "multi_head_attention":
+    MODEL = 
 else:
     raise ValueError(
         f"Unsupported MODEL_NAME '{MODEL_NAME}'"
