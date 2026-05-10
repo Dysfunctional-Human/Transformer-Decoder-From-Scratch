@@ -9,11 +9,11 @@ class FeedForward(nn.Module):
         in_dims: int, 
         out_dims: int
     ):
-        """_summary_
+        """A simple linear layer followed by non-linearity
 
         Args:
-            in_dims (int): _description_
-            out_dims (int): _description_
+            in_dims (int): Input dimensions for the FeedForward layer
+            out_dims (int): Output dimensions from the FeedForward layer
         """
         super().__init__()
         self.in_dims = in_dims
@@ -28,13 +28,13 @@ class FeedForward(nn.Module):
         self, 
         x: torch.Tensor
     ):
-        """_summary_
+        """A single forward step through the FeedForward network
 
         Args:
-            x (torch.Tensor): _description_
+            x (torch.Tensor): Input indices
 
         Returns:
-            _type_: _description_
+            torch.Tensor: Output logits
         """
         return self.ffn(x)
         
@@ -191,8 +191,8 @@ class MultiHeadAttentionLanguageModel(nn.Module):
             n_embed=self.n_embed
         )
         
-        self.projection_layer = FeedForward(
-            in_dims=self.num_heads*(self.n_embed//self.num_heads),
+        self.projection_mlp = FeedForward(
+            in_dims=self.n_embed,
             out_dims=self.n_embed
         )
         
@@ -233,6 +233,8 @@ class MultiHeadAttentionLanguageModel(nn.Module):
         """
 
         B, T = idx.shape
+        if T > self.context_window_len:
+            raise ValueError(f"T ({T}) exceeds context_window_len ({self.context_window_len})")
         # idx and targets -> [batch_size, context_window_len]
         
         tok_emb = self.token_embedding_table(idx)
@@ -243,7 +245,7 @@ class MultiHeadAttentionLanguageModel(nn.Module):
         # x -> [batch_size, context_window_len, embed_size]
         x = self.attention_heads(x)
         # x -> [batch_size, context_window_len, num_heads*(n_embed//num_heads)]
-        x = self.projection_layer(x)
+        x = self.projection_mlp(x)
         # x -> [batch_size, context_window_len, n_embed]
         logits = self.lm_head(x)
         # logits -> [batch_size, context_window_len, vocab_size]
