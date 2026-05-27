@@ -6,12 +6,14 @@ from typing import Tuple
 class FeedForward(nn.Module):
     def __init__(
         self, 
-        n_embed: int
+        n_embed: int,
+        dropout_prob: float
     ):
         """A simple linear layer followed by non-linearity
 
         Args:
             n_embed: Embedding dimension for input tokens
+            dropout_prob: Dropout probability
         """
         super().__init__()
         self.n_embed = n_embed
@@ -25,7 +27,8 @@ class FeedForward(nn.Module):
             nn.Linear(
                 in_features=4*self.n_embed,
                 out_features=self.n_embed
-            )
+            ),
+            nn.Dropout(p=dropout_prob)
         )
         
     def forward(
@@ -50,7 +53,8 @@ class Block(nn.Module):
         n_embed: int,
         n_head: int,
         head_size: int,
-        context_window_len: int
+        context_window_len: int,
+        dropout_prob: float
     ):
         """Initializing a single attention block
 
@@ -59,12 +63,13 @@ class Block(nn.Module):
             n_head (int): Number of attention heads
             head_size(int): Embedding dimension for each head
             context_window_len(int): Length of context window
+            dropout_prob: Dropout probability
             
         """
         super().__init__()
         head_size = n_embed // n_head
-        self.sa = MultiHeadAttention(num_heads=n_head, n_embed=n_embed, head_size=head_size, context_window_len=context_window_len)
-        self.ffwd  = FeedForward(n_embed=n_embed)
+        self.sa = MultiHeadAttention(num_heads=n_head, n_embed=n_embed, head_size=head_size, context_window_len=context_window_len, dropout_prob=dropout_prob)
+        self.ffwd  = FeedForward(n_embed=n_embed, dropout_prob=dropout_prob)
         self.ln1 = nn.LayerNorm(normalized_shape=n_embed)
         self.ln2 = nn.LayerNorm(normalized_shape=n_embed)
         
@@ -90,7 +95,8 @@ class MultiHeadAttention(nn.Module):
         num_heads: int,
         head_size: int,
         context_window_len: int,
-        n_embed: int
+        n_embed: int,
+        dropout_prob: float
     ):
         """A block of Multi Head Attention
 
@@ -99,6 +105,7 @@ class MultiHeadAttention(nn.Module):
             head_size (int): Embedding dimension for each head
             context_window_len (int): Length of context window
             n_embed (int): Embedding dimension of input data
+            dropout_prob(float): Dropout probability
         """
         super().__init__()
         self.head_size = head_size
@@ -116,11 +123,13 @@ class MultiHeadAttention(nn.Module):
             Head(
                 context_window_len=self.context_window_len,
                 n_embed=self.n_embed,
-                head_size=self.head_size
+                head_size=self.head_size,
+                dropout_prob=dropout_prob
             ) for _ in range(num_heads)
         ])
         
-        self.proj = nn.Linear(in_features=self.n_embed, out_features=self.n_embed)
+        self.proj = nn.Linear(in_features=self.head_size*self.num_heads, out_features=self.n_embed)
+        self.dropout = nn.Dropout(p=dropout_prob)
 
     def forward(
         self, 
@@ -139,6 +148,7 @@ class MultiHeadAttention(nn.Module):
         # concatenates output from each attention head -> (n_embed//num_heads)*num_heads => [batch_size, context_window_len, n_embed]
         out = self.proj(out)    # projection layer
         # x -> [batch_size, context_window_len, n_embed] 
+        out = self.dropout(out) # dropout layer
         
         return out
     
@@ -148,7 +158,8 @@ class Head(nn.Module):
         self, 
         context_window_len: int, 
         n_embed: int, 
-        head_size: int
+        head_size: int,
+        dropout_prob: float
     ):
         """A single head of self attention
 
@@ -156,12 +167,14 @@ class Head(nn.Module):
             context_window_len (int): Length of model's context window
             n_embed (int): Embedding dimension
             head_size (int): Attention embedding dimensions
+            dropout_prob(float): Dropout probability
         """
         super().__init__()
         self.key = nn.Linear(in_features=n_embed, out_features=head_size, bias=False)
         self.query = nn.Linear(in_features=n_embed, out_features=head_size, bias=False)
         self.value = nn.Linear(in_features=n_embed, out_features=head_size, bias=False)
         self.register_buffer('tril', torch.tril(torch.ones(context_window_len, context_window_len)))
+        self.dropout =nn.Dropout(dropout_prob)
         self.n_embed = n_embed
         self.context_window_len = context_window_len
     
@@ -195,7 +208,7 @@ class Head(nn.Module):
         # This helps the model by not letting the the words in the future deciding the embedding of the current word, since task is next word prediction - the model can "cheat" by assigning highest weightage to the token just after the current one and thus being able to perfectly predict the next token but still not actually learn anything valuable.
         wei = F.softmax(wei, dim=-1) # wei -> [batch_size, context_window_len, context_window_len]
         # Making all the weights add upto 1
-        
+        wei = self.dropout(wei)
         v = self.value(x)   # v -> [batch_size, context_window_len, head_size]
         out = wei @ v   # out -> [batch_size, context_window_len, head_size]
         # new updated embeddings from self attention
@@ -209,6 +222,8 @@ class DecoderModel(nn.Module):
         EMBED_SIZE: int,
         CONTEXT_WINDOW_LEN: int,
         NUM_HEADS: int,
+        NUM_BLOCKS: int,
+        DROP_PROB: float,
         DEVICE: str = "cpu",
         # Optional token ID for the end-of-text token; used to stop generation when encountered
         endoftext_token_id: int | None = None,
@@ -216,16 +231,27 @@ class DecoderModel(nn.Module):
     ):
         """Initializes the Decoder Model
 
+
         Args:
             vocab_size (int): Size of dataset vocabulary
             EMBED_SIZE (int): Embedding dimension
+            CONTEXT_WINDOW_LEN (int): Length of context window
+            NUM_HEADS (int): Number of self attention heads inside a single multihead attention block
+            NUM_BLOCKS (int): Number of multihead attention blocks
+            DEVICE (str, optional): Model and data device. Defaults to "cpu".
             endoftext_token_id (int | None, optional): Token_id for endoftext token to stop generation. Defaults to None.
+            DROP_PROB (float): Dropout probability
+
+        Raises:
+            ValueError: When embedding dimension isn't a multiple of number of attention head (output of each head needs to be concatenated)
         """
         super().__init__()
         self.n_embed = EMBED_SIZE
         self.context_window_len = CONTEXT_WINDOW_LEN
         self.device = DEVICE
         self.num_heads = NUM_HEADS
+        self.num_blocks = NUM_BLOCKS
+        self.drop_probs = DROP_PROB
         
         self.token_embedding_table = nn.Embedding(vocab_size, self.n_embed) # (num_embeddings, embed_size)
         self.position_embedding_table = nn.Embedding(self.context_window_len, self.n_embed) # (number of tokens given to the model, embed_size)
@@ -235,14 +261,9 @@ class DecoderModel(nn.Module):
         if self.n_embed % self.num_heads != 0:
             raise ValueError(f"Embedding dimension n_embed ({self.n_embed}) must be divisible by num_heads ({self.num_heads})")
         head_dim = self.n_embed // self.num_heads
-        self.blocks = nn.Sequential(
-            Block(n_embed=self.n_embed, n_head=self.num_heads, context_window_len=self.context_window_len, head_size=head_dim),
-            Block(n_embed=self.n_embed, n_head=self.num_heads, context_window_len=self.context_window_len, head_size=head_dim),
-            Block(n_embed=self.n_embed, n_head=self.num_heads, context_window_len=self.context_window_len, head_size=head_dim),
-            nn.LayerNorm(normalized_shape=self.n_embed)
-
-        )
-        
+        self.blocks = nn.Sequential(*[Block(n_embed=self.n_embed, n_head=self.num_heads, head_size=head_dim, context_window_len=self.context_window_len, dropout_prob=self.drop_probs)
+                                      for _ in range(self.num_blocks)])
+        self.ln_f = nn.LayerNorm(self.n_embed) # final layer norm
         self.lm_head = nn.Linear(in_features=self.n_embed, out_features=vocab_size)
         
         # Better weight initialization for faster convergence
@@ -291,6 +312,8 @@ class DecoderModel(nn.Module):
         x = tok_emb + pos_emb
         # x -> [batch_size, context_window_len, n_embed]
         x = self.blocks(x)
+        # x -> [batch_size, context_window_len, n_embed]
+        x = self.ln_f(x)
         # x -> [batch_size, context_window_len, n_embed]
         logits = self.lm_head(x)
         # logits -> [batch_size, context_window_len, vocab_size]
@@ -350,7 +373,7 @@ if __name__ == "__main__":
     
     torch.manual_seed(1337)
         
-    decoder = DecoderModel(vocab_size=52, EMBED_SIZE=32, CONTEXT_WINDOW_LEN=8, endoftext_token_id=0, NUM_HEADS=4)
+    decoder = DecoderModel(vocab_size=52, EMBED_SIZE=32, CONTEXT_WINDOW_LEN=8, endoftext_token_id=0, NUM_HEADS=4, NUM_BLOCKS=6, DROP_PROB=0.5)
     print("Decoder model: ", decoder)
     print("State Dictionary of model:", decoder.state_dict())
     

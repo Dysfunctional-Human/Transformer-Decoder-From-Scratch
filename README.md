@@ -1,5 +1,13 @@
 # Transformer-Decoder-From-Scratch
 
+Run with:
+
+```bash
+python -m scripts.trainer
+```
+
+in the project root directory
+
 - dataset class - ready
 - models - model initialization, model loading, model saving, forward functions, generate functions  - ready
 - training script - ready

@@ -41,3 +41,12 @@ else:
     
 if MODEL_NAME != "bigram":
     LEARNING_RATE = 1e-3
+
+if MODEL_NAME == "decoder":
+    BATCH_SIZE = 64
+    CONTEXT_WINDOW_LEN = 256
+    LEARNING_RATE = 3e-4
+    EMBED_SIZE = 384
+    NUM_HEADS = 6
+    NUM_BLOCKS = 6
+    DROP_PROB = 0.2
