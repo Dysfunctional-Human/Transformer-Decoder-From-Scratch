@@ -202,6 +202,7 @@ def engine(
         dtype=torch.long).to(device)
     model.to(device)
     
+    print(f"Number of parameters in the model: {sum(p.numel() for p in model.parameters())/1e6: .2f}M parameters")
     print("Engine model device:", next(model.parameters()).device)
     print("Training data device:", training_data.device)
     print("Validation data device:", validation_data.device)
