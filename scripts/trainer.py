@@ -4,21 +4,39 @@ repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 from tqdm.auto import tqdm
-from data.data_preparation import Dataset, build_shared_tokenizer, save_tokenizer_artifacts, load_tokenizer_artifacts
+from data.data_preparation import Dataset, build_shared_tokenizer, save_tokenizer_artifacts, load_tokenizer_artifacts, build_bpe_tokenizer, load_bpe_tokenizer
 from utils.utils import get_batch, save_model, plot_model_curves, save_results
 from typing import Dict, Tuple
 from datetime import datetime
 from pathlib import Path
 from typing import List
 from configs import config
+from tokenizers import Tokenizer
 
-def get_tokenizer_artifacts() -> Tuple[List[str], Dict[str, int], Dict[int, str]]:
+def get_tokenizer_artifacts() -> Tuple[Tokenizer | None, List[str], Dict[str, int], Dict[int, str]]:
     """Gets tokenizer artifacts based on config 
 
     Returns:
         Tuple[List[str], Dict[str, int], Dict[int, str]]: vocab, stoi, itos for the dataset
     """
-    vocab, stoi, itos = None, None, None
+    bpe_tokenizer, vocab, stoi, itos = None, None, None, None
+    if config.USE_BPE:
+        if not os.path.exists(f"{config.TOKENIZER_DIR}/{config.TOKENIZER_TYPE}/tokenizer.json"):
+            print("Training new BPE Tokenizer")
+            bpe_tokenizer, vocab, stoi, itos = build_bpe_tokenizer(
+                dataset_paths=[config.TRAIN_PATH, config.VAL_PATH],
+                vocab_size=config.BPE_VOCAB_SIZE,
+                min_frequency=config.MIN_FREQUENCY,
+                tokenizer_type=config.TOKENIZER_TYPE,
+                save_dir=config.TOKENIZER_DIR
+            )
+        else:
+            print("Loading pre-trained BPE tokenizer")
+            bpe_tokenizer, vocab, stoi, itos = load_bpe_tokenizer(
+                tokenizer_dir=config.TOKENIZER_DIR,
+                tokenizer_type=config.TOKENIZER_TYPE
+            )
+    
     if config.USE_SHARED_TOKENIZER:
         if config.REBUILD_SHARED_TOKENIZER:
             vocab, stoi, itos = build_shared_tokenizer(
@@ -31,12 +49,14 @@ def get_tokenizer_artifacts() -> Tuple[List[str], Dict[str, int], Dict[int, str]
                 target_dir=config.TOKENIZER_DIR,
                 vocab=vocab, 
                 stoi=stoi,
-                itos=itos
+                itos=itos,
+                tokenizer_type=config.TOKENIZER_TYPE
             )
         else:
             try:
                 vocab, stoi, itos = load_tokenizer_artifacts(
-                    target_dir=config.TOKENIZER_DIR
+                    target_dir=config.TOKENIZER_DIR,
+                    tokenizer_type=config.TOKENIZER_TYPE
                 )
             except FileNotFoundError:
                 vocab, stoi, itos = build_shared_tokenizer(
@@ -49,14 +69,16 @@ def get_tokenizer_artifacts() -> Tuple[List[str], Dict[str, int], Dict[int, str]
                     target_dir=config.TOKENIZER_DIR,
                     vocab=vocab,
                     stoi=stoi,
-                    itos=itos
+                    itos=itos,
+                    tokenizer_type=config.TOKENIZER_TYPE
                 )
-    return vocab, stoi, itos
+    return bpe_tokenizer, vocab, stoi, itos
 
 def prepare_data(
     vocab: List[str] | None,
     stoi: Dict[str, int] | None,
-    itos: Dict[int, str] | None
+    itos: Dict[int, str] | None,
+    bpe_tokenizer: Tokenizer | None
 ) -> Tuple[Dataset, Dataset]:
     """Prepares datasets for model training based on config
 
@@ -75,7 +97,8 @@ def prepare_data(
             debug=config.DEBUG,
             vocab=vocab,
             stoi=stoi,
-            itos=itos
+            itos=itos,
+            bpe_tokenizer=bpe_tokenizer if bpe_tokenizer is not None else None
         )
         VAL_DATA = Dataset(
             data_path=config.VAL_PATH, 
@@ -83,7 +106,8 @@ def prepare_data(
             debug=config.DEBUG,
             vocab=vocab,
             stoi=stoi,
-            itos=itos
+            itos=itos,
+            bpe_tokenizer=bpe_tokenizer if bpe_tokenizer is not None else None
         )
     else:
         TRAIN_DATA = Dataset(
@@ -128,6 +152,7 @@ def train_step(
     _, train_loss = model.forward(X, y)
     optimizer.zero_grad()
     train_loss.backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
     optimizer.step()
     
     return train_loss.item()
@@ -173,7 +198,8 @@ def engine(
     optimizer: torch.optim.Optimizer,
     epochs: int,
     context_window_len: int, 
-    batch_size: int
+    batch_size: int,
+    use_bpe: bool
 ) -> Dict[str, List[float]]:
     """Training loop for the model
 
@@ -201,6 +227,17 @@ def engine(
         ), 
         dtype=torch.long).to(device)
     model.to(device)
+    
+    if use_bpe:
+        test_text = "Once upon a time, a little cat saw a big dog"
+        
+        encoded = train_data.encode_story(test_text)
+        print(f"Original: {test_text}")
+        print(f"Encoded IDs: {encoded[:20]}")
+        
+        decoded = train_data.decode_story(encoded)
+        
+        print(f"Decoded: {decoded}")
     
     print(f"Number of parameters in the model: {sum(p.numel() for p in model.parameters())/1e6: .2f}M parameters")
     print("Engine model device:", next(model.parameters()).device)
@@ -279,11 +316,16 @@ def engine(
 
 if __name__ == "__main__":
     
-    vocab, stoi, itos = get_tokenizer_artifacts()
+    bpe_tokenizer, vocab, stoi, itos = get_tokenizer_artifacts()
+    bpe_tokenizer, _, _, _ = load_bpe_tokenizer(
+        tokenizer_dir=config.TOKENIZER_DIR,
+        tokenizer_type=config.TOKENIZER_TYPE
+    )
     TRAIN_DATA, VAL_DATA = prepare_data(
         vocab=vocab,
         stoi=stoi,
-        itos=itos
+        itos=itos,
+        bpe_tokenizer=bpe_tokenizer
     )
     kwargs = {k: v for k, v in vars(config).items() if not k.startswith("__")}
     kwargs["endoftext_token_id"]= TRAIN_DATA.stoi["<|endoftext|>"]
@@ -311,4 +353,5 @@ if __name__ == "__main__":
         epochs=config.EPOCHS,
         context_window_len=config.CONTEXT_WINDOW_LEN,
         batch_size=config.BATCH_SIZE,
+        use_bpe=True
     )

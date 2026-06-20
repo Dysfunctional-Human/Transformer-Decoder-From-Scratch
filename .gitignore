@@ -1,7 +1,6 @@
 .venv
-/*.txt
-dataset
+.txt
+dataset/
 __pycache__
-trained_models/
 run.py
 /*.DS_STORE
