@@ -4,3 +4,4 @@ dataset/
 __pycache__
 run.py
 /*.DS_STORE
+trained_models/
