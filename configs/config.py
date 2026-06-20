@@ -26,7 +26,7 @@ VAL_PATH = "dataset/TinyStories_valid_5k.txt"
 DEBUG = True
 
 LEARNING_RATE = 1e-2
-EPOCHS = 10
+EPOCHS = 5000
 
 CONTEXT_WINDOW_LEN = 8
 BATCH_SIZE = 4
