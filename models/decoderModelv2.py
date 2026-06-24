@@ -75,12 +75,12 @@ class Block(nn.Module):
         
     def forward(
         self,
-        x: int
+        x: torch.Tensor
     ):
         """A single forward step for attention block
 
         Args:
-            x (int): Input data
+            x (torch.Tensor): Input data
 
         Returns:
             torch.Tensor: output logits
@@ -358,6 +358,7 @@ class DecoderModelv2(nn.Module):
                 # logits -> [batch_size, context_window_len, vocab_size] Here logits is 3 dimensional since target is None in the forward method
                 logits = logits[:, -1, :]   # Focus only on the previous token (not the entire context window len, only the last time step)
                 # logits -> [batch_size, vocab_size]
+                logits = logits / max(self.temperature, 1e-8)
                 probs = F.softmax(logits, dim=-1)    # probs -> [batch_size, vocab_size]
                 idx_next = torch.multinomial(probs, num_samples=1)  # idx_next -> [batch_size, 1]
                 # Rather than picking the most probable, sampling from multinomial distribution
@@ -375,7 +376,7 @@ if __name__ == "__main__":
     
     torch.manual_seed(1337)
         
-    decoder = DecoderModelv2(vocab_size=52, EMBED_SIZE=32, CONTEXT_WINDOW_LEN=8, endoftext_token_id=0, NUM_HEADS=4, NUM_BLOCKS=6, DROP_PROB=0.5)
+    decoder = DecoderModelv2(vocab_size=52, EMBED_SIZE=32, CONTEXT_WINDOW_LEN=8, endoftext_token_id=0, NUM_HEADS=4, NUM_BLOCKS=6, DROP_PROB=0.5, SAMPLE_TEMPERATURE=1.0)
     print("Decoder model: ", decoder)
     print("State Dictionary of model:", decoder.state_dict())
     

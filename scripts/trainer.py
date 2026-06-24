@@ -14,63 +14,68 @@ from configs import config
 from tokenizers import Tokenizer
 
 def get_tokenizer_artifacts() -> Tuple[Tokenizer | None, List[str], Dict[str, int], Dict[int, str]]:
-    """Gets tokenizer artifacts based on config 
+    """Gets tokenizer artifacts based on config.
 
     Returns:
-        Tuple[List[str], Dict[str, int], Dict[int, str]]: vocab, stoi, itos for the dataset
+        Tuple[Tokenizer | None, List[str], Dict[str, int], Dict[int, str]]: tokenizer (if BPE), vocab, stoi, itos.
     """
     bpe_tokenizer, vocab, stoi, itos = None, None, None, None
+    # ------------------------------------------------------------
+    # BPE tokenizer handling
+    # ------------------------------------------------------------
     if config.USE_BPE:
-        if not os.path.exists(f"{config.TOKENIZER_DIR}/{config.TOKENIZER_TYPE}/tokenizer.json"):
+        tokenizer_path = f"{config.TOKENIZER_DIR}/{config.TOKENIZER_TYPE}/tokenizer.json"
+        if not os.path.exists(tokenizer_path):
             print("Training new BPE Tokenizer")
             bpe_tokenizer, vocab, stoi, itos = build_bpe_tokenizer(
                 dataset_paths=[config.TRAIN_PATH, config.VAL_PATH],
-                vocab_size=config.BPE_VOCAB_SIZE,
+                bpe_vocab_size=config.BPE_VOCAB_SIZE,
                 min_frequency=config.MIN_FREQUENCY,
                 tokenizer_type=config.TOKENIZER_TYPE,
-                save_dir=config.TOKENIZER_DIR
+                save_dir=config.TOKENIZER_DIR,
             )
         else:
             print("Loading pre-trained BPE tokenizer")
             bpe_tokenizer, vocab, stoi, itos = load_bpe_tokenizer(
                 tokenizer_dir=config.TOKENIZER_DIR,
-                tokenizer_type=config.TOKENIZER_TYPE
+                tokenizer_type=config.TOKENIZER_TYPE,
             )
-    
+        # When using BPE we already have a full vocab/stoi/itos pair, so we skip the shared‑tokenizer path.
+        # This avoids a mismatch where a character‑based shared tokenizer (size ~53) would be loaded over a
+        # BPE vocab (size ~1000), causing out‑of‑bounds token IDs during model forward.
+        return bpe_tokenizer, vocab, stoi, itos
+
+    # ------------------------------------------------------------
+    # Fallback: shared (character) tokenizer path
+    # ------------------------------------------------------------
     if config.USE_SHARED_TOKENIZER:
         if config.REBUILD_SHARED_TOKENIZER:
             vocab, stoi, itos = build_shared_tokenizer(
-                dataset_paths=[
-                    config.TRAIN_PATH, 
-                    config.VAL_PATH
-                ]
+                dataset_paths=[config.TRAIN_PATH, config.VAL_PATH]
             )
             save_tokenizer_artifacts(
                 target_dir=config.TOKENIZER_DIR,
-                vocab=vocab, 
+                vocab=vocab,
                 stoi=stoi,
                 itos=itos,
-                tokenizer_type=config.TOKENIZER_TYPE
+                tokenizer_type=config.TOKENIZER_TYPE,
             )
         else:
             try:
                 vocab, stoi, itos = load_tokenizer_artifacts(
                     target_dir=config.TOKENIZER_DIR,
-                    tokenizer_type=config.TOKENIZER_TYPE
+                    tokenizer_type=config.TOKENIZER_TYPE,
                 )
             except FileNotFoundError:
                 vocab, stoi, itos = build_shared_tokenizer(
-                    dataset_paths=[
-                        config.TRAIN_PATH, 
-                        config.VAL_PATH
-                    ]
+                    dataset_paths=[config.TRAIN_PATH, config.VAL_PATH]
                 )
                 save_tokenizer_artifacts(
                     target_dir=config.TOKENIZER_DIR,
                     vocab=vocab,
                     stoi=stoi,
                     itos=itos,
-                    tokenizer_type=config.TOKENIZER_TYPE
+                    tokenizer_type=config.TOKENIZER_TYPE,
                 )
     return bpe_tokenizer, vocab, stoi, itos
 
@@ -317,10 +322,7 @@ def engine(
 if __name__ == "__main__":
     
     bpe_tokenizer, vocab, stoi, itos = get_tokenizer_artifacts()
-    bpe_tokenizer, _, _, _ = load_bpe_tokenizer(
-        tokenizer_dir=config.TOKENIZER_DIR,
-        tokenizer_type=config.TOKENIZER_TYPE
-    )
+
     TRAIN_DATA, VAL_DATA = prepare_data(
         vocab=vocab,
         stoi=stoi,
@@ -329,7 +331,11 @@ if __name__ == "__main__":
     )
     kwargs = {k: v for k, v in vars(config).items() if not k.startswith("__")}
     kwargs["endoftext_token_id"]= TRAIN_DATA.stoi["<|endoftext|>"]
-    kwargs["vocab_size"]= len(TRAIN_DATA.vocab)
+
+    if isinstance(vocab, list):
+        kwargs["vocab_size"] = len(vocab)
+    else:
+        kwargs["vocab_size"] = getattr(config, "BPE_VOCAB_SIZE", 0)
     
     MODEL = config.MODEL(**kwargs)
     
@@ -353,5 +359,5 @@ if __name__ == "__main__":
         epochs=config.EPOCHS,
         context_window_len=config.CONTEXT_WINDOW_LEN,
         batch_size=config.BATCH_SIZE,
-        use_bpe=True
+        use_bpe=config.USE_BPE
     )

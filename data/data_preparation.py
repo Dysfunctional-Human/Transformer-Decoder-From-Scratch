@@ -95,17 +95,21 @@ def load_bpe_tokenizer(
         return tokenizer, vocab_size, stoi, itos
     
     bpe_vocab = tokenizer.get_vocab()
-    
-    stoi = bpe_vocab.copy
+    # Ensure special tokens are present in the tokenizer vocab
+    missing = [tok for tok in special_tokens if tok not in bpe_vocab]
+    if missing:
+        tokenizer.add_special_tokens(missing)
+        bpe_vocab = tokenizer.get_vocab()
+    stoi = bpe_vocab.copy()
     itos = {token_id: token_str for token_str, token_id in stoi.items()}
-    
+
     for tok in special_tokens:
         if tok not in stoi:
             new_id = len(stoi)
             tokenizer.add_special_tokens([tok])
             stoi[tok] = new_id
-            itos[new_id] = tok 
-    
+            itos[new_id] = tok
+
     vocab_size = len(stoi)
     print(f"BPE tokenizer loaded: vocab_size={vocab_size}")
     return tokenizer, vocab_size, stoi, itos
@@ -219,9 +223,13 @@ class Dataset():
         })
         
         if use_bpe:
+            # Apply Unicode normalization for punctuation and spaces
+            text_clean = text_clean.translate(replace_map)
             allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,!?;:'\"-()[]{}\n\t")
             text_clean = "".join(ch if ch in allowed or ch.isspace() else " " for ch in text_clean)
         else:
+            # Apply Unicode normalization for punctuation and spaces
+            text_clean = text_clean.translate(replace_map)
             allowed = set("abcdefghijklmnopqrstuvwxyz0123456789 .,!?;:'\"-()/\n\t")
             text_clean = "".join(ch for ch in text_clean if ch in allowed)
             
@@ -281,21 +289,25 @@ class Dataset():
         return num_list
     
     def decode_story(
-        self, 
+        self,
         num_list: List[int]
     ) -> str:
-        """Decodes a list of numbers into their original story
+        """Decodes a list of numbers into their original story.
 
         Args:
-            num_list (list[int]): list of numbers to be decoded
+            num_list (list[int]): list of token IDs to decode.
 
         Returns:
-            str: decoded story
+            str: Decoded story with BPE markers cleaned.
         """
-        token_ids = [t for t in num_list if t != -100 and 0 <= t < 10000]
+        token_ids = [t for t in num_list if t != -100 and 0 <= t < len(self.itos)]
         if self.use_bpe and self.bpe_tokenizer is not None:
-            return self.bpe_tokenizer.decode(token_ids, skip_special_tokens=True)
-        
+            decoded = self.bpe_tokenizer.decode(token_ids, skip_special_tokens=True)
+            # Clean up ByteLevel BPE space marker "Ġ" (represents a leading space).
+            cleaned = decoded.replace("Ġ", " ")
+            # Remove stray control characters like "Ċ".
+            cleaned = cleaned.replace("Ċ", "")
+            return cleaned
         return ''.join([self.itos[n] for n in num_list])
     
     def info(self):
@@ -395,12 +407,14 @@ def build_bpe_tokenizer(
         Tuple[Tokenizer, List[str], Dict[str, int], Dict[int, str]]: _description_
     """
     
+    # Ensure the output directory for this tokenizer type exists
     os.makedirs(save_dir, exist_ok=True)
-    
+    os.makedirs(f"{save_dir}/{tokenizer_type}", exist_ok=True)
+
     # Initialize the BPE tokenizer
     tokenizer = Tokenizer(BPE(unk_token="<|unk|>"))
     tokenizer.pre_tokenizer = ByteLevel(add_prefix_space=False)
-    
+
     # Configure trainer
     trainer = trainers.BpeTrainer(
         vocab_size=bpe_vocab_size,
@@ -408,16 +422,18 @@ def build_bpe_tokenizer(
         special_tokens=special_tokens,
         show_progress=True
     )
-    
+
     tokenizer.train(files=dataset_paths, trainer=trainer)
-    
+
+    # Save the trained tokenizer JSON
     tokenizer.save(f"{save_dir}/{tokenizer_type}/tokenizer.json")
-    
+
     vocab_dict = tokenizer.get_vocab()
     vocab = list(vocab_dict.keys())
-    stoi = vocab_dict.copy(),
+    stoi = vocab_dict.copy()
+    # Build id‑to‑token map from stoi
     itos = {v: k for k, v in stoi.items()}
-    
+
     print(f"BPE tokenizer trained: vocab_size = {len(stoi)}")
     return tokenizer, vocab, stoi, itos
 

@@ -26,7 +26,7 @@ VAL_PATH = "dataset/TinyStories_valid_5k.txt"
 DEBUG = True
 
 LEARNING_RATE = 1e-2
-EPOCHS = 5000
+EPOCHS = 5
 
 CONTEXT_WINDOW_LEN = 8
 BATCH_SIZE = 4
@@ -63,8 +63,8 @@ if MODEL_NAME == "decoderv2":
     NUM_HEADS = 6
     NUM_BLOCKS = 6
     DROP_PROB = 0.2
-    USE_BPE = False
+    USE_BPE = True
     TOKENIZER_TYPE = "bpe"
-    BPE_VOCAB_SIZE = 1000
+    BPE_VOCAB_SIZE = 2000
     MIN_FREQUENCY = 2
     SAMPLE_TEMPERATURE = 0.85
