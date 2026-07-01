@@ -224,4 +224,3 @@ def plot_model_curves(
     else:
         plt.show()
     plt.close()
-    

@@ -7,14 +7,19 @@ from utils.utils import get_batch
 from typing import List, Tuple, Dict, Optional
 import json
 from pathlib import Path
+from tokenizers import ByteLevelBPETokenizer, Tokenizer, trainers
+from tokenizers.models import BPE
+from tokenizers.pre_tokenizers import ByteLevel
+import os
 
 def save_tokenizer_artifacts(
     target_dir: str,
     vocab: List[str],
     stoi: Dict[str, int],
     itos: Dict[int, str],
+    tokenizer_type: str,
     sep: str = "<|endoftext|>",
-    unk: str = "<|unk|>"
+    unk: str = "<|unk|>",
 ) -> None:
     """Save important tokenizer artifacts - vocab, stoi, itos for future use
 
@@ -28,29 +33,32 @@ def save_tokenizer_artifacts(
     """
     target = Path(target_dir)
     target.mkdir(parents=True, exist_ok=True)
-    
-    with open(target / "vocab.json", "w", encoding="utf-8") as f:
+    # Ensure the tokenizer type subdirectory exists
+    (target / tokenizer_type).mkdir(parents=True, exist_ok=True)
+
+    with open(target / f"{tokenizer_type}/vocab.json", "w", encoding="utf-8") as f:
         json.dump(vocab, f, ensure_ascii=True)
     
-    with open(target / "stoi.json", "w", encoding="utf-8") as f:
+    with open(target / f"{tokenizer_type}/stoi.json", "w", encoding="utf-8") as f:
         json.dump(stoi, f, ensure_ascii=True)
     
     # In a JSON object, keys are always strings    
     itos_json = {str(k): v for k, v in itos.items()}
-    with open(target / "itos.json", "w", encoding="utf-8") as f:
+    with open(target / f"{tokenizer_type}/itos.json", "w", encoding="utf-8") as f:
         json.dump(itos_json, f, ensure_ascii=True)
         
-    with open(target / "meta.json", "w", encoding="utf-8") as f:
+    with open(target / f"{tokenizer_type}/meta.json", "w", encoding="utf-8") as f:
         json.dump(
             {
                 "sep": sep,
                 "unk_token": unk
             }, f, ensure_ascii=True
         )
-    print("Tokenizer artifacts saved successfully at: ", target_dir)
+    print("Tokenizer artifacts saved successfully at: ", f"{target_dir}/{tokenizer_type}")
         
 def load_tokenizer_artifacts(
-    target_dir: str
+    target_dir: str,
+    tokenizer_type: str
 ) -> Tuple[List[str], Dict[str, int], Dict[int, str]]:
     """Loads Tokenizer artifacts - vocab, stoi, itos
 
@@ -62,55 +70,59 @@ def load_tokenizer_artifacts(
     """
     target = Path(target_dir)
     
-    with open(target / "vocab.json", "r", encoding="utf-8") as f:
+    with open(target / f"{tokenizer_type}/vocab.json", "r", encoding="utf-8") as f:
         vocab = json.load(f)
     
-    with open(target / "stoi.json", "r", encoding="utf-8") as f:
+    with open(target / f"{tokenizer_type}/stoi.json", "r", encoding="utf-8") as f:
         stoi = json.load(f)
     
-    with open(target / "itos.json", "r", encoding="utf-8") as f:
+    with open(target / f"{tokenizer_type}/itos.json", "r", encoding="utf-8") as f:
         itos_json = json.load(f)
     
     itos = {int(k): v for k, v in itos_json.items()}
     print("Tokenizer artifacts loaded successfully")
     return vocab, stoi, itos
 
-def build_shared_tokenizer(
-    dataset_paths: List[str],
-    sep: str = "<|endoftext|>",
-    unk_token: str = "<|unk|>"
-) -> Tuple[List[str], Dict[str, int], Dict[int, str]]:
-    """Building a shared tokenizer from multiple datasets (mainly so train and val datasets can have common vocabulary, and stoi-itos mappings)
-
-    Args:
-        dataset_paths (List[str]): List of dataset paths
-        sep (str, optional): Separator token (token used to end a story). Defaults to "<|endoftext|>".
-        unk_token (str, optional): Unknown token (for words not in vocab). Defaults to "<|unk|>".
-
-    Returns:
-        Tuple[List[str], Dict[str, int], Dict[int, str]]: vocab, stoi, itos
-    """
-    all_tokens: List[str] = []
-    for p in dataset_paths:
-        with open(p, "r", encoding="utf-8") as f:
-            raw = f.read().lower()
-        _, _, _, tokens = Dataset.clean_data_from_raw(raw_text=raw, sep=sep)
-        all_tokens.extend(tokens)
-
-    vocab = sorted(set(all_tokens) | {sep, unk_token}) 
-    stoi = {ch: i for i, ch in enumerate(vocab)}
-    itos = {i: ch for i, ch in enumerate(vocab)}
+def load_bpe_tokenizer(
+    tokenizer_dir: str,
+    tokenizer_type: str,
+    special_tokens: List[str] = ["<|endoftext|>", "<|unk|>"]
+) -> Tuple[Tokenizer, int, Dict[str, int], Dict[int, str]]:
+    tokenizer, vocab_size, stoi, itos = None, None, None, None
+    if os.path.exists(path=f"{tokenizer_dir}/{tokenizer_type}/tokenizer.json"):
+        tokenizer = Tokenizer.from_file(f"{tokenizer_dir}/{tokenizer_type}/tokenizer.json")
+    else:
+        return tokenizer, vocab_size, stoi, itos
     
-    return vocab, stoi, itos
+    bpe_vocab = tokenizer.get_vocab()
+    # Ensure special tokens are present in the tokenizer vocab
+    missing = [tok for tok in special_tokens if tok not in bpe_vocab]
+    if missing:
+        tokenizer.add_special_tokens(missing)
+        bpe_vocab = tokenizer.get_vocab()
+    stoi = bpe_vocab.copy()
+    itos = {token_id: token_str for token_str, token_id in stoi.items()}
+
+    for tok in special_tokens:
+        if tok not in stoi:
+            new_id = len(stoi)
+            tokenizer.add_special_tokens([tok])
+            stoi[tok] = new_id
+            itos[new_id] = tok
+
+    vocab_size = len(stoi)
+    print(f"BPE tokenizer loaded: vocab_size={vocab_size}")
+    return tokenizer, vocab_size, stoi, itos
     
 class Dataset():
     """Dataset class for the Decoder model
     """
     def __init__(
         self, 
-        data_path: str, 
-        device = "cuda", 
+        data_path: str,
+        device = "cuda",
         debug: bool = False,
+        bpe_tokenizer: Optional[Tokenizer] = None,
         vocab: Optional[List[str]] = None,
         stoi: Optional[Dict[str, int]] = None,
         itos: Optional[Dict[int, str]] = None,
@@ -119,9 +131,10 @@ class Dataset():
         """Initialize the Dataset class
 
         Args:
-            data_path (str): Data storage location
+            data_path (str): Data storage directory
             device (str, optional): Device to load the data on ('cpu' or 'cuda' or 'mps'). Defaults to "cuda".
             debug (bool, optional): Whether to print extra debug statements. Defaults to False.
+            bpe_tokenizer (Optional[Tokenizer]): BPE Tokenizer
             vocab (Optional[List[str]], optional): Shared vocabulary to use (if any). Defaults to None.
             stoi (Optional[Dict[str, int]], optional): Shared stoi dictionary to use (if any). Defaults to None.
             itos (Optional[Dict[int, str]], optional): Shared itos dictionary to use (if any). Defaults to None.
@@ -129,6 +142,8 @@ class Dataset():
         """
         self.data_path = data_path
         self.raw_text = None
+        self.bpe_tokenizer = bpe_tokenizer
+        self.use_bpe = self.bpe_tokenizer is not None
         try:
             with open(data_path, "r", encoding='utf-8') as f:
                 self.raw_text = f.read().lower()
@@ -143,7 +158,6 @@ class Dataset():
         self.sep = "<|endoftext|>"
         self.unk_token = unk_token
         self.clean_text, self.stories, self.encoded_stories, self.all_tokens = self.clean_data()
-
         
         provided = [vocab is not None, stoi is not None, itos is not None]
         if any(provided) and not all (provided):
@@ -163,7 +177,7 @@ class Dataset():
             self.stoi = {ch:i for i, ch in enumerate(self.vocab)}
             self.itos = {i:ch for i, ch in enumerate(self.vocab)}
         
-        if debug:
+        if debug and not self.use_bpe:
             if self.decode_story(self.encode_story(self.clean_text)) != self.clean_text:
                 raise ValueError("Encode/Decode round‑trip validation failed. Check the data and the encode-decode functions")
         if device == "cuda" and torch.cuda.is_available():
@@ -177,12 +191,14 @@ class Dataset():
     @staticmethod   # Making this static so it can be used outside the class without object initialization    
     def clean_data_from_raw(
         raw_text: str, 
-        sep: str = "<|endoftext|>"
+        sep: str = "<|endoftext|>",
+        use_bpe: bool = False
     ) -> Tuple[str, List[str], List[List[str]], List[str]]:
         """Data cleaning like removing unnecessary characters
         Args:
             raw_text (str): raw text to be cleaned
             sep (str, optional): The separator used between stories. Defaults to "<|endoftext|>"
+            use_bpe (bool): Whether to use BPE tokenizer
 
         Returns:
             text_clean (str): Cleaned final text
@@ -206,23 +222,28 @@ class Dataset():
             "\u200b": "",  # zero-width space
         })
         
-        text_clean = text_clean.translate(replace_map)
-        allowed = set("abcdefghijklmnopqrstuvwxyz0123456789 .,!?;:'\"-()/\n\t")
-        
-        stories = []
-        for chunk in text_clean.split(sep=sep):
-            chunk = "".join(ch for ch in chunk if ch in allowed)
-            chunk = re.sub(r"[ ]{2,}", " ", chunk)  # collapse repeated spaces
-            chunk = chunk.strip()
-            if chunk:
-                stories.append(chunk)
-        
+        if use_bpe:
+            # Apply Unicode normalization for punctuation and spaces
+            text_clean = text_clean.translate(replace_map)
+            allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,!?;:'\"-()[]{}\n\t")
+            text_clean = "".join(ch if ch in allowed or ch.isspace() else " " for ch in text_clean)
+        else:
+            # Apply Unicode normalization for punctuation and spaces
+            text_clean = text_clean.translate(replace_map)
+            allowed = set("abcdefghijklmnopqrstuvwxyz0123456789 .,!?;:'\"-()/\n\t")
+            text_clean = "".join(ch for ch in text_clean if ch in allowed)
+            
+        stories = [s.strip() for s in text_clean.split(sep) if s.strip()]
         text_clean = f"{sep}".join(stories) + sep
+
+        if use_bpe:
+            encoded_stories = [[s] for s in stories]
+            total_tokens = []
+        else:
+            encoded_stories = [list(s) + [sep] for s in stories]
+            total_tokens = [ch for s in stories for ch in s] + [sep] * len(stories)
         
-        encoded_stories = [list(s) + [sep] for s in stories]
-        total_tokens = [ch for s in stories for ch in s] + [sep] * len(stories)
-        
-        return text_clean, stories, encoded_stories, total_tokens    
+        return text_clean, stories, encoded_stories, total_tokens
     
     def clean_data(self) -> Tuple[str, List[str], List[List[str]], List[str]]:
         """Wrapper over clean_data_from_raw. Kept for backwards compatibility
@@ -232,7 +253,8 @@ class Dataset():
         """
         return Dataset.clean_data_from_raw(
             raw_text=self.raw_text,
-            sep=self.sep
+            sep=self.sep,
+            use_bpe=self.use_bpe
         )
 
     
@@ -248,6 +270,13 @@ class Dataset():
         Returns:
             list[int]: encoded story
         """
+        if self.use_bpe and self.bpe_tokenizer is not None:
+            encoding = self.bpe_tokenizer.encode(text, add_special_tokens=False)
+            token_ids = encoding.ids
+            if self.sep in self.stoi:
+                token_ids.append(self.stoi[self.sep])
+            return token_ids
+        
         num_list = []
         c = 0
         while c < len(text):
@@ -260,17 +289,25 @@ class Dataset():
         return num_list
     
     def decode_story(
-        self, 
+        self,
         num_list: List[int]
     ) -> str:
-        """Decodes a list of numbers into their original story
+        """Decodes a list of numbers into their original story.
 
         Args:
-            num_list (list[int]): list of numbers to be decoded
+            num_list (list[int]): list of token IDs to decode.
 
         Returns:
-            str: decoded story
+            str: Decoded story with BPE markers cleaned.
         """
+        token_ids = [t for t in num_list if t != -100 and 0 <= t < len(self.itos)]
+        if self.use_bpe and self.bpe_tokenizer is not None:
+            decoded = self.bpe_tokenizer.decode(token_ids, skip_special_tokens=True)
+            # Clean up ByteLevel BPE space marker "Ġ" (represents a leading space).
+            cleaned = decoded.replace("Ġ", " ")
+            # Remove stray control characters like "Ċ".
+            cleaned = cleaned.replace("Ċ", "")
+            return cleaned
         return ''.join([self.itos[n] for n in num_list])
     
     def info(self):
@@ -319,6 +356,86 @@ class Dataset():
                 print(f"When input is: {context.tolist()} the target is: {target}")
                 print(f"Context: {self.decode_story(context.tolist())} Target: {self.decode_story([target.tolist()])}")
             print("----------x----------")     
+
+def build_shared_tokenizer(
+    dataset_paths: List[str],
+    sep: str = "<|endoftext|>",
+    unk_token: str = "<|unk|>"
+) -> Tuple[List[str], Dict[str, int], Dict[int, str]]:
+    """Building a shared tokenizer from multiple datasets (mainly so train and val datasets can have common vocabulary, and stoi-itos mappings)
+
+    Args:
+        dataset_paths (List[str]): List of dataset paths
+        sep (str, optional): Separator token (token used to end a story). Defaults to "<|endoftext|>".
+        unk_token (str, optional): Unknown token (for words not in vocab). Defaults to "<|unk|>".
+
+    Returns:
+        Tuple[List[str], Dict[str, int], Dict[int, str]]: vocab, stoi, itos
+    """
+    all_tokens: List[str] = []
+    for p in dataset_paths:
+        with open(p, "r", encoding="utf-8") as f:
+            raw = f.read().lower()
+        _, _, _, tokens = Dataset.clean_data_from_raw(raw_text=raw, sep=sep)
+        all_tokens.extend(tokens)
+
+    vocab = sorted(set(all_tokens) | {sep, unk_token}) 
+    stoi = {ch: i for i, ch in enumerate(vocab)}
+    itos = {i: ch for i, ch in enumerate(vocab)}
+    
+    return vocab, stoi, itos
+
+def build_bpe_tokenizer(
+    dataset_paths: List[str],
+    save_dir: str,
+    tokenizer_type: str,
+    bpe_vocab_size: int = 1000,
+    min_frequency: int = 2,
+    special_tokens: List[str] = ["<|endoftext|>", "<|unk|>"],
+)  -> Tuple[Tokenizer, List[str], Dict[str, int], Dict[int, str]]:
+    """_summary_
+
+    Args:
+        dataset_paths (List[str]): _description_
+        save_dir (str): _description_
+        tokenizer_type (str): _description_
+        bpe_vocab_size (int, optional): _description_. Defaults to 1000.
+        min_frequency (int, optional): _description_. Defaults to 2.
+        special_tokens (List[str], optional): _description_. Defaults to ["<|endoftext|>", "<|unk|>"].
+
+    Returns:
+        Tuple[Tokenizer, List[str], Dict[str, int], Dict[int, str]]: _description_
+    """
+    
+    # Ensure the output directory for this tokenizer type exists
+    os.makedirs(save_dir, exist_ok=True)
+    os.makedirs(f"{save_dir}/{tokenizer_type}", exist_ok=True)
+
+    # Initialize the BPE tokenizer
+    tokenizer = Tokenizer(BPE(unk_token="<|unk|>"))
+    tokenizer.pre_tokenizer = ByteLevel(add_prefix_space=False)
+
+    # Configure trainer
+    trainer = trainers.BpeTrainer(
+        vocab_size=bpe_vocab_size,
+        min_frequency=min_frequency,
+        special_tokens=special_tokens,
+        show_progress=True
+    )
+
+    tokenizer.train(files=dataset_paths, trainer=trainer)
+
+    # Save the trained tokenizer JSON
+    tokenizer.save(f"{save_dir}/{tokenizer_type}/tokenizer.json")
+
+    vocab_dict = tokenizer.get_vocab()
+    vocab = list(vocab_dict.keys())
+    stoi = vocab_dict.copy()
+    # Build id‑to‑token map from stoi
+    itos = {v: k for k, v in stoi.items()}
+
+    print(f"BPE tokenizer trained: vocab_size = {len(stoi)}")
+    return tokenizer, vocab, stoi, itos
 
 if __name__ == "__main__":
     mock_data = Dataset(data_path="dataset/TinyStories_train_100k.txt", device="cuda", debug=True)   
