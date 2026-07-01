@@ -88,8 +88,9 @@ def save_model(
     state_dict = {key: value.detach().cpu() for key, value in model.state_dict().items()}
     torch.save(state_dict, model_save_path)
         
-def load_model(model: torch.nn.Module,
-               target_model_path: str,
+def load_model(
+    model: torch.nn.Module,
+    target_model_path: str,
 ) -> torch.nn.Module:
     """Loads the Language Model on cpu
 

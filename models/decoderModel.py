@@ -354,7 +354,7 @@ class DecoderModel(nn.Module):
                 idx_cropped = idx[:, -self.context_window_len:]
                 logits, _ = self(idx_cropped, targets=None)
                 # logits -> [batch_size, context_window_len, vocab_size] Here logits is 3 dimensional since target is None in the forward method
-                logits = logits[:, -1, :]   # Focus only on the previous token (not the entire context window len, only the last time step)
+                logits = logits[:, -1, :]   # taking the output at the last position, which encodes the whole available context.
                 # logits -> [batch_size, vocab_size]
                 probs = F.softmax(logits, dim=-1)    # probs -> [batch_size, vocab_size]
                 idx_next = torch.multinomial(probs, num_samples=1)  # idx_next -> [batch_size, 1]
