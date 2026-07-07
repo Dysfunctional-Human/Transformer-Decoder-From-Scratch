@@ -40,9 +40,6 @@ def get_tokenizer_artifacts() -> Tuple[Tokenizer | None, List[str], Dict[str, in
                 tokenizer_dir=config.TOKENIZER_DIR,
                 tokenizer_type=config.TOKENIZER_TYPE,
             )
-        # When using BPE we already have a full vocab/stoi/itos pair, so we skip the shared‑tokenizer path.
-        # This avoids a mismatch where a character‑based shared tokenizer (size ~53) would be loaded over a
-        # BPE vocab (size ~1000), causing out‑of‑bounds token IDs during model forward.
         return bpe_tokenizer, vocab, stoi, itos
 
     # ------------------------------------------------------------
