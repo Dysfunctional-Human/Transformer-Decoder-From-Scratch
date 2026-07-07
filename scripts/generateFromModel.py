@@ -4,8 +4,9 @@ repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 
-from configs import generationConfig, config
+from configs import generationConfig
 import torch.nn.functional as F
+from data.data_preparation import load_bpe_tokenizer, load_tokenizer_artifacts
 from scripts.trainer import get_tokenizer_artifacts
 from tokenizers import Tokenizer
 from typing import List
@@ -17,14 +18,14 @@ def batch_generate(
     model: torch.nn.Module,
     max_new_tokens: int
 ) -> torch.Tensor:
-    """_summary_
+    """Generates text from the loaded model
 
     Args:
-        indices (torch.Tensor): _description_
-        model (torch.nn.Module): _description_
+        indices (torch.Tensor): List of indices passed to the model as input
+        model (torch.nn.Module): Loaded model
 
     Returns:
-        torch.Tensor: _description_
+        torch.Tensor: output logits
     """
     
     with torch.inference_mode():
@@ -52,6 +53,7 @@ def decode(
 
     Args:
         num_list (list[int]): list of token IDs to decode.
+        bpe_tokenizer (Tokenizer): Tokenizer to use
 
     Returns:
         str: Decoded story with BPE markers cleaned.
@@ -67,6 +69,15 @@ def encode(
     text: str,
     bpe_tokenizer: Tokenizer
 ) -> torch.Tensor:
+    """Encodes a string to a tensor of indices
+
+    Args:
+        text (str): Text to be encoded
+        bpe_tokenizer (Tokenizer): Tokenizer to use
+
+    Returns:
+        torch.Tensor: encoded text
+    """
     encoding = bpe_tokenizer.encode(text, add_special_tokens=False)
     token_ids = encoding.ids
     if bpe_tokenizer.token_to_id("<|endoftext|>") is not None:

@@ -25,7 +25,7 @@ python -m scripts.trainer
 - Data utilities: implemented (`data/data_preparation.py`) including shared character tokenizers and a BPE training/loading path.
 - Training loop and engine: implemented (`scripts/trainer.py`) with model saving, plotting and sample generation during training.
 - Models: several model implementations live in `models/` (see below). Models can be selected from the central config.
-- Generation helper: `scripts/generateFromModel.py` is a placeholder you can extend to load a checkpoint and sample from a trained model.
+- Generation helper: `scripts/generateFromModel.py` loads a saved checkpoint and samples text from a trained model.
 
 ## Repository layout
 
@@ -36,7 +36,7 @@ python -m scripts.trainer
   - `decoderModel.py` / `decoderModelv2.py` — decoder architectures
   - `selfAttentionModel.py` / `multiHeadAttentionModel.py` — attention-based variants
 - `scripts/trainer.py` — training entrypoint and training engine.
-- `scripts/generateFromModel.py` — generation script (extendable; currently empty by design).
+- `scripts/generateFromModel.py` — generation script for loading a checkpoint and sampling text.
 - `trained_models/` — output directory used by the trainer to save checkpoints, results.json and plots.
 - `corpus/` — tokenizer artifacts (e.g. `corpus/bpe/tokenizer.json`).
 - `dataset/` — prepared text datasets (TinyStories files included).
@@ -118,14 +118,20 @@ Switch to bigram model:
 
 ## Generate from a checkpoint
 
-`scripts/generateFromModel.py` is intended as a convenience script for loading a checkpoint and sampling a model. The file is currently a minimal placeholder — you can implement a CLI that:
+To generate text from a trained model checkpoint:
 
-- Loads `configs/config.py` (or a small specialized config)
-- Instantiates the right model class using the same kwargs used in training
-- Loads a saved state dict from a file in `trained_models/`
-- Calls `model.generate()` or a similar sampling wrapper
+```bash
+python -m scripts.generateFromModel
+```
 
-If you'd like, I can add a ready-to-run `generateFromModel.py` CLI — tell me the preferred arguments and sampling options (temperature, max tokens, checkpoint path) and I'll implement it.
+The script will:
+1. Load the model configuration from `configs/generationConfig.py`
+2. Load the BPE tokenizer from the corpus directory
+3. Load the trained model weights from the path specified in the config
+4. Prompt you for initial text (or press Enter to start from scratch)
+5. Generate and print the completed story
+
+The generation uses the model, tokenizer, and hyperparameters specified in `generationConfig.py`. To use a different checkpoint, update the `MODEL_PATH` in `configs/generationConfig.py`.
 
 ## Development notes and tips
 
